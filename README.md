@@ -1,2 +1,2 @@
-# casper-lct
-Casper Lens Contrast Tester
+# pst-algo  
+Eureka PST algorithm
