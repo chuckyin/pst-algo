@@ -96,12 +96,12 @@ class Frame:
         check = False
         dist_error = ratio * self.med_dot_dist
         search_dist = num_dots_miss * self.med_dot_dist
-        xmin = dot1[0] - search_dist
-        xmax = dot1[0] + search_dist
-        if xmin < dot2[0] < xmax:
+        xmin = dot1[1] - search_dist
+        xmax = dot1[1] + search_dist
+        if xmin < dot2[1] < xmax:
             ntemp1 = np.sqrt(slope * slope + 1.0)
-            ntemp2 = dot1[1] - slope * dot1[0]
-            dist_d12 = np.abs(slope * dot2[0] - dot2[1] + ntemp2) / ntemp1
+            ntemp2 = dot1[0] - slope * dot1[1]
+            dist_d12 = np.abs(slope * dot2[1] - dot2[0] + ntemp2) / ntemp1
             if dist_d12 < dist_error:
                 check = True
                 
@@ -184,7 +184,7 @@ class Frame:
             self.dotsxy_indexed[pt] = list(zip(vi - center_dot_vi, hi - center_dot_hi))
             
             
-    def plot_lines_dots(self, width, height):
+    def plot_lines_dots(self, width, height, filename):
         fig = plt.figure(frameon=False)
         fig.set_size_inches(width / 100, height / 100)
         for line in self.hor_lines:
@@ -193,8 +193,9 @@ class Frame:
         for line in self.ver_lines:
             line = np.asarray(line)
             plt.plot(line[:, 0], height - line[:, 1], '-o', color='green')
-        plt.scatter(self.center_dot.x, self.center_dot.y)    
-        plt.show()
+        #plt.scatter(self.center_dot.x, self.center_dot.y)  
+        plt.savefig(os.path.join(output_path, filename), dpi=100)
+        #plt.show()
         
 
                     
@@ -210,13 +211,13 @@ class Dot:
     
 current_path = os.getcwd()
 
-# input_path = os.path.join(current_path, '60deg_test_55p5' + '/')
-# output_path = os.path.join(current_path, '60deg_test_55p5_output' + '/')
-# image_files = glob.glob(input_path + '*.tiff')
+input_path = os.path.join(current_path, '60deg_test_55p5' + '/')
+output_path = os.path.join(current_path, '60deg_test_55p5_output' + '/')
+image_files = glob.glob(input_path + '*.tiff')
 
-image_files = ['test3.tiff']
-input_path = current_path
-output_path = current_path
+# image_files = ['test2.tiff']
+# input_path = current_path
+# output_path = current_path
 
 log_file = 'Detection Log_' + time.strftime('%Y%m%d-%H%M%S') + '.txt'
 
@@ -415,12 +416,15 @@ if __name__ == '__main__':
         draw_dots(image, frame.dots, filename=frame_num+'_dots.tiff') # For debugging blob detection
         
         med_size, med_dist = frame.calc_dot_size_dist()
+        print('Dot Size:', med_size, 'Distance:', med_dist)
         
         print('Starting slope calculations for frame', frame_num)
         proc = prep_image(image, normalize_and_filter=True, binarize=False)
         init_hor_slope, init_ver_slope, hor_dist_error, ver_dist_error = get_initial_slopes(proc, height, width, ratio=0.3)
         hor_slope, ver_slope = frame.get_slopes(init_hor_slope, init_ver_slope, hor_dist_error, ver_dist_error)
+        print('HSlope:', hor_slope, 'VSlope:', ver_slope)
         hor_lines, ver_lines = frame.group_lines()
+        frame.plot_lines_dots(width, height, filename=frame_num+'_grouped.tiff')
         frame.find_index()
         print('Finished indexing calculations for frame', frame_num)
         
