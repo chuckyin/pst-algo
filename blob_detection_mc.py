@@ -18,6 +18,8 @@ from datetime import timedelta
 
 from skimage.transform import radon
 
+import re
+
 
 class Frame:
     def __init__(self):
@@ -219,6 +221,22 @@ image_files = glob.glob(input_path + '*.tiff')
 # input_path = current_path
 # output_path = current_path
 
+#----Xuan test------
+
+current_path = r'/Users/xuawang/Dropbox (Meta)/Pupil Swim Metrology/PST/20221121 2d dots 60deg/Arcata EVT2 A/test_55p5/'
+
+input_path = current_path
+output_path = os.path.join(current_path, 'output' + '/')
+if not os.path.exists(output_path):
+    os.makedirs(output_path)
+
+image_files = glob.glob(input_path + '*.tiff')
+image_files.sort(key=lambda f: int(re.sub('\D', '', f)))
+image_files =image_files[:1]
+#image_files =image_files[:110:10]  #every nth image
+
+#-------------
+
 log_file = 'Detection Log_' + time.strftime('%Y%m%d-%H%M%S') + '.txt'
 
 
@@ -401,7 +419,7 @@ if __name__ == '__main__':
         height, width, _ = image.shape
         
         frame = find_dots(image)
-        print('Frame', frame_num, ': Finding dots is complete')
+        print('Frame', frame_num, ': Finding dots is complete, found ', str(len(frame.dots)), 'dots')
         
         frame.center_dot = find_center_dot(frame.dots, height, width)
         print('Frame', frame_num, ': Center dot was found at ', frame.center_dot.__str__())
