@@ -198,7 +198,7 @@ class Frame:
            line_int = [(int(pt[0]), int(pt[1])) for pt in line]
            for pt1, pt2 in zip(line_int, line_int[1:]): 
                cv2.line(image_cpy, pt1, pt2, [0, 255, 0], 2)
-       cv2.imwrite(os.path.join(output_path, filename), image_cpy)
+       cv2.imwrite(os.path.join(output_path, filename), image_cpy, [cv2.IMWRITE_JPEG_QUALITY, 40])
         
 
                     
@@ -218,7 +218,7 @@ current_path = os.getcwd()
 # output_path = os.path.join(current_path, '60deg_test_55p5_output' + '/')
 # image_files = glob.glob(input_path + '*.tiff')
 
-image_files = ['test2.tiff']
+image_files = ['test4.tiff']
 input_path = current_path
 output_path = current_path
 
@@ -407,7 +407,7 @@ def draw_dots(image, dots, filename):
             cv2.circle(image_cpy, (int(dot.x), int(dot.y)), int(dot.size/2), (0, 255, 0), 3) # Green Dots
         else:
             cv2.circle(image_cpy, (int(dot.x), int(dot.y)), int(dot.size/2), (0, 0, 255), 3) # Red Circle    
-    cv2.imwrite(os.path.join(output_path, filename), image_cpy)
+    cv2.imwrite(os.path.join(output_path, filename), image_cpy, [cv2.IMWRITE_JPEG_QUALITY, 40])
     
 
 def process_csv(filename):
@@ -529,9 +529,9 @@ if __name__ == '__main__':
         if fov_dot is None:
             write_log('ERROR: Could not find FOV point for frame ', str(frame_num), filename=log_file)          
         else:
-            draw_dots(image, [fov_dot], filename=frame_num+'_fov.tiff') # For debugging FOV dot detection
+            draw_dots(image, [fov_dot], filename=frame_num+'_fov.jpeg') # For debugging FOV dot detection
         
-        draw_dots(image, frame.dots, filename=frame_num+'_dots.tiff') # For debugging blob detection
+        draw_dots(image, frame.dots, filename=frame_num+'_dots.jpeg') # For debugging blob detection
         
         med_size, med_dist = frame.calc_dot_size_dist()
         print('Dot Size:', med_size, 'Distance:', med_dist)
@@ -542,7 +542,7 @@ if __name__ == '__main__':
         hor_slope, ver_slope = frame.get_slopes(init_hor_slope, init_ver_slope, hor_dist_error, ver_dist_error)
         print('HSlope:', hor_slope, 'VSlope:', ver_slope)
         hor_lines, ver_lines = frame.group_lines()
-        frame.draw_lines_on_image(image, width, height, filename=frame_num+'_grouped.tiff')
+        frame.draw_lines_on_image(image, width, height, filename=frame_num+'_grouped.jpeg')
         frame.find_index()
         print('Finished indexing calculations for frame', frame_num)
         
@@ -580,7 +580,7 @@ if __name__ == '__main__':
     end_time = time.monotonic()
     print(timedelta(seconds=end_time - start_time))
     
-    process_csv(csv_file)
+    #process_csv(csv_file)
     
 
         
