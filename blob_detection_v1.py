@@ -36,6 +36,11 @@ class Frame:
         self.hor_lines = None
         self.ver_lines = None
         self.dotsxy_indexed = {}  # key(x, y) : value(xi, yi)
+        self.xi_range =60
+        self.yi_range =60
+        self.map_xy = np.empty((self.xi_range*2+1,self.yi_range*2+1,2)) # init map w +/-60 deg 
+        self.map_xy[:,:,:] =np.nan
+        self.map_dxdy = self.map_xy
    
         
     def get_x_y(self, inv=False):
@@ -176,7 +181,7 @@ class Frame:
             center_dot_hi = np.asarray([i_line for i_line, line in enumerate(self.hor_lines) if center_dot_pt in line])
             center_dot_vi = np.asarray([i_line for i_line, line in enumerate(self.ver_lines) if center_dot_pt in line])
         except ValueError:
-            print('Center Dot was not indexed. Will use the closest dot instead.')
+            print('Warning: Center Dot was not indexed. Will use the closest dot instead.')
             dist_2 = np.sum((np.asarray(common_pts) - np.asarray(center_dot_pt)) ** 2, axis=1)
             pseudo_center_pt = common_pts[np.argmin(dist_2)]
             center_dot_hi = np.asarray([i_line for i_line, line in enumerate(self.hor_lines) if pseudo_center_pt in line])
@@ -187,6 +192,30 @@ class Frame:
             vi = np.asarray([i_line for i_line, line in enumerate(self.ver_lines) if pt in line])
             self.dotsxy_indexed[pt] = list(zip(vi - center_dot_vi, hi - center_dot_hi))
             
+    def generate_map_xy(self):
+        # from indexed dots to generate xy coordinate map
+        cnt =0
+        for coord in self.dotsxy_indexed:
+            ind = self.dotsxy_indexed[coord][0]
+
+            if np.abs(ind[0]) <= self.xi_range:
+                if np.abs(ind[1]) <= self.yi_range:
+                    self.map_xy[ind[0]+ self.xi_range,ind[1]+self.yi_range,:] = coord #offset center
+                    cnt+=1
+        print('Map generation completed with ' , str(cnt), ' indexed dots' )  
+
+    def generate_map_dxdy(self,spacing:int):
+        # from map_xy generate derivative map, spacing as int
+        pos = int(np.round(spacing/2))
+        neg = pos - spacing
+        
+        mapx = self.map_xy[:,:,0]
+        mapdx = shift_fillnan(mapx,-pos,0) - shift_fillnan(mapx,-neg,0)
+        mapy = self.map_xy[:,:,1]
+        mapdy = shift_fillnan(mapy,-pos,1) - shift_fillnan(mapy,-neg,1)
+        
+        self.map_dxdy[:,:,0]=mapdx
+        self.map_dxdy[:,:,1]=mapdy
             
     def draw_lines_on_image(self, image, width, height, filename):
        image_cpy = image.copy()
@@ -221,20 +250,22 @@ current_path = os.getcwd()
 image_files = ['test4.tiff']
 input_path = current_path
 output_path = current_path
+driver = 'FATP'
+
 
 #----Xuan test------
 
-# current_path = r'/Users/xuawang/Dropbox (Meta)/Pupil Swim Metrology/PST/20221121 2d dots 60deg/Arcata EVT2 A/test_55p5/'
+current_path = r'/Users/xuawang/Dropbox (Meta)/Pupil Swim Metrology/PST/20221121 2d dots 60deg/Arcata EVT2 A/test_55p5/'
 
-# input_path = current_path
-# output_path = os.path.join(current_path, 'output' + '/')
-# if not os.path.exists(output_path):
-#     os.makedirs(output_path)
+input_path = current_path
+output_path = os.path.join(current_path, 'output' + '/')
+if not os.path.exists(output_path):
+    os.makedirs(output_path)
 
-# image_files = glob.glob(input_path + '*.tiff')
-# image_files.sort(key=lambda f: int(re.sub('\D', '', f)))
-# image_files =image_files[:1]
-# #image_files =image_files[:110:10]  #every nth image
+image_files = glob.glob(input_path + '*.tiff')
+image_files.sort(key=lambda f: int(re.sub('\D', '', f)))
+image_files =image_files[71:72]
+#image_files =image_files[:110:10]  #every nth image
 
 #-------------
 
@@ -506,6 +537,25 @@ def process_csv(filename):
     dx = merged_na['dx_norm'].tolist()
     dy = merged_na['dy_norm'].tolist()
     plt.tricontourf(x, y, dx)
+
+def shift_fillnan (arr, shift, axis):
+    #shift 2d array with nan fillin
+    arr = np.roll(arr, shift, axis)
+    if axis ==0:
+        if shift>=0:
+            arr[:shift,:] =np.nan
+        else:
+            arr[shift:,:] =np.nan
+    elif axis ==1:
+        if shift>=0:
+            arr[:,:shift] =np.nan
+        else:    
+            arr[:,shift:] =np.nan
+    else:
+        pass
+    
+    return arr    
+
     
     
 if __name__ == '__main__':
@@ -515,6 +565,13 @@ if __name__ == '__main__':
     for image_file in image_files:
         frame_num = ((image_file.split(os.path.sep)[-1].split('_'))[-1].split('.tiff'))[0]
         image = cv2.imread(os.path.join(current_path, image_file))
+        
+        if driver =="MODEL":
+            #image = np.fliplr(image)
+            pass
+        elif driver == "FATP": #rotate 180 deg as FATP is mounted upside down
+            image =np.rot90(image,2)  
+
         print('Frame', frame_num, ': Processing started')
         height, width, _ = image.shape
         
@@ -545,6 +602,9 @@ if __name__ == '__main__':
         frame.draw_lines_on_image(image, width, height, filename=frame_num+'_grouped.jpeg')
         frame.find_index()
         print('Finished indexing calculations for frame', frame_num)
+        frame.generate_map_xy()
+        frame.generate_map_dxdy(4)
+
         
         # Prepare to save results
         x, y, xi, yi, size = [], [], [], [], []
