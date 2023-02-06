@@ -143,9 +143,9 @@ class Frame:
             len_accepted = np.int16(accepted_ratio * np.max(list_len))
             lines_selected = [line for line in list_lines if len(line) > len_accepted] 
             if ver:
-                lines_selected = sorted(lines_selected, key=lambda list_: np.mean(list_[:, 1]))
-            else: 
                 lines_selected = sorted(lines_selected, key=lambda list_: np.mean(list_[:, 0]))
+            else: 
+                lines_selected = sorted(lines_selected, key=lambda list_: np.mean(list_[:, 1]))
             
             return lines_selected
         
@@ -548,20 +548,20 @@ if __name__ == '__main__':
         
         # Prepare to save results
         x, y, xi, yi, size = [], [], [], [], []
-        for k, v in frame.dotsxy_indexed.items():
-            x.append(k[0])
-            y.append(k[1])
-            xi.append(v[0][0])
-            yi.append(v[0][1])
-        pts = list(zip(x, y))
-        
         xpts = [dot.x for dot in frame.dots]
         ypts = [dot.y for dot in frame.dots]
         sizepts = [dot.size for dot in frame.dots]
-        l = list(zip(xpts, ypts, sizepts))
-        # Only save the indexed dots
-        for pt in pts:
-            size.append([item[2] for item in l if (item[0] == pt[0]) and (item[1] == pt[1])][0])
+        
+        for xpt, ypt, sizept in list(zip(xpts, ypts, sizepts)):
+            x.append(xpt)
+            y.append(ypt)
+            size.append(sizept)
+            if (xpt, ypt) in frame.dotsxy_indexed:
+                xi.append(frame.dotsxy_indexed[(xpt, ypt)][0][0])
+                yi.append(frame.dotsxy_indexed[(xpt, ypt)][0][1]) 
+            else:
+                xi.append(np.nan)
+                yi.append(np.nan) 
         
         # Write results to dataframe and csv
         mini_df = pd.DataFrame({'x' : x, 'y' : y, 'size' : size, 'xi' : xi, 'yi' : yi})
