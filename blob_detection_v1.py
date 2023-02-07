@@ -255,7 +255,7 @@ driver = 'FATP'
 
 #----Xuan test------
 
-current_path = r'/Users/xuawang/Dropbox (Meta)/Pupil Swim Metrology/PST/20221121 2d dots 60deg/Arcata EVT2 A/test_55p5/'
+current_path = r'/Users/xuawang/Dropbox (Meta)/Pupil Swim Metrology/PST/20221121 2d dots 60deg/Arcata EVT2 A/test2_55p5/'
 
 input_path = current_path
 output_path = os.path.join(current_path, 'output' + '/')
@@ -264,8 +264,8 @@ if not os.path.exists(output_path):
 
 image_files = glob.glob(input_path + '*.tiff')
 image_files.sort(key=lambda f: int(re.sub('\D', '', f)))
-image_files =image_files[71:72]
-#image_files =image_files[:110:10]  #every nth image
+#image_files =image_files[:1]
+image_files =image_files[:110:10]  #every nth image
 
 #-------------
 
@@ -439,7 +439,7 @@ def draw_dots(image, dots, filename):
         else:
             cv2.circle(image_cpy, (int(dot.x), int(dot.y)), int(dot.size/2), (0, 0, 255), 3) # Red Circle    
     cv2.imwrite(os.path.join(output_path, filename), image_cpy, [cv2.IMWRITE_JPEG_QUALITY, 40])
-    
+
 
 def process_csv(filename):
     df = pd.read_csv(filename)
@@ -556,12 +556,75 @@ def shift_fillnan (arr, shift, axis):
     
     return arr    
 
+def calc_median_map(maps, min_num =3):
+    #calculate the median map of a maps (list), with min number of valid elements (will output nan if <min_num)
+    cnt =0
+    maps_arr = np.asarray(maps)
+    l,xi,yi,dim = np.shape(maps_arr)
+    output = np.empty((xi,yi,dim))
+    if min_num > l:
+        min_num = l
+        print ("Warning: min number of valid elements reduce to: ", str(l))
+    
+    for i in range(xi):
+        for j in range(yi):
+            for k in range(dim):
+                if np.count_nonzero(~np.isnan(maps_arr[:,i,j,k]))>=min_num:
+                    output[i,j,k] = np.nanmedian(maps_arr[:,i,j,k])
+                    cnt +=1
+                else:
+                    output[i,j,k] = np.nan
+    print ('Median map calculateion completed with ' , str(cnt), ' dots' )                
+    return output
+
+def plot_map_norm(map_norm, fname_str=''):
+    
+    xi_full, yi_full, dim = map_norm.shape
+    xi_range = int((xi_full -1)/2)
+    yi_range = int((yi_full -1)/2)
+    X,Y =np.meshgrid(np.linspace(-xi_range,xi_range,xi_full),np.linspace(-yi_range,yi_range,yi_full))
+    
+    for i in [0,1]: #x,y
+
+        if i ==0:
+            axis = "x"
+        else:
+            axis = "y"
+        fig=plt.figure(dpi=200) #figsize=(5, 5),
+        ax = fig.add_subplot(111)
+        plt.title('Normalized'+ axis + '-Spacing Change')
+        plt.xlabel('xi')
+        plt.ylabel('yi')
+        levels = np.linspace(0.95, 1.05, 11)
+        plt.contourf(X,Y,map_norm[:,:,i].T,levels=levels, cmap ='seismic',extend ='both')  #cmap ='coolwarm','bwr'
+        ax.set_aspect('equal')
+    
+        plt.xlim(-xi_range, xi_range)
+        plt.ylim(yi_range, -yi_range)
+        
+        radii = [25,45]
+    
+        for radius in radii:    
+            theta = np.linspace(0, 2*np.pi, 100)
+            a = radius*np.cos(theta)
+            b = radius*np.sin(theta)
+            plt.plot(a, b,color='green', linestyle=(0, (5, 5)), linewidth=0.4)  #'loosely dotted'
+            
+        plt.grid(color='grey', linestyle='dashed', linewidth=0.2)
+        plt.rcParams["font.size"] = "5"
+        plt.colorbar()
+        plt.savefig(os.path.join(output_path, fname_str + '_' + axis +'.png'))
+        #plt.show()
+        
+        
+
     
     
 if __name__ == '__main__':
     start_time = time.monotonic()
     df = pd.DataFrame()
     cnt = 0
+    maps_dxdy =[]
     for image_file in image_files:
         frame_num = ((image_file.split(os.path.sep)[-1].split('_'))[-1].split('.tiff'))[0]
         image = cv2.imread(os.path.join(current_path, image_file))
@@ -603,7 +666,8 @@ if __name__ == '__main__':
         frame.find_index()
         print('Finished indexing calculations for frame', frame_num)
         frame.generate_map_xy()
-        frame.generate_map_dxdy(4)
+        frame.generate_map_dxdy(4)  #4x spacing
+        maps_dxdy.append(frame.map_dxdy)
 
         
         # Prepare to save results
@@ -635,7 +699,13 @@ if __name__ == '__main__':
         cnt += 1
         df = pd.concat([df, mini_df])
         print('Total frames processed is', str(cnt), '/', len(image_files))
+    
         
+    map_dxdy_median = calc_median_map(maps_dxdy, min_num =1)
+    map_dxdy_norm = maps_dxdy[5] / map_dxdy_median
+    plot_map_norm(map_dxdy_norm, filename = "")
+    
+    
     df.to_csv(csv_file)
     end_time = time.monotonic()
     print(timedelta(seconds=end_time - start_time))
