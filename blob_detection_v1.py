@@ -40,7 +40,8 @@ class Frame:
         self.yi_range =60
         self.map_xy = np.empty((self.xi_range*2+1,self.yi_range*2+1,2)) # init map w +/-60 deg 
         self.map_xy[:,:,:] =np.nan
-        self.map_dxdy = self.map_xy
+        self.map_dxdy = np.empty((self.xi_range*2+1,self.yi_range*2+1,2))
+        self.map_dxdy[:,:,:] =np.nan
    
         
     def get_x_y(self, inv=False):
@@ -209,9 +210,10 @@ class Frame:
         pos = int(np.round(spacing/2))
         neg = pos - spacing
         
-        mapx = self.map_xy[:,:,0]
+        map_xy_copy = np.copy(self.map_xy)
+        mapx = map_xy_copy[:,:,0]
         mapdx = shift_fillnan(mapx,-pos,0) - shift_fillnan(mapx,-neg,0)
-        mapy = self.map_xy[:,:,1]
+        mapy = map_xy_copy[:,:,1]
         mapdy = shift_fillnan(mapy,-pos,1) - shift_fillnan(mapy,-neg,1)
         
         self.map_dxdy[:,:,0]=mapdx
@@ -265,7 +267,7 @@ if not os.path.exists(output_path):
 image_files = glob.glob(input_path + '*.tiff')
 image_files.sort(key=lambda f: int(re.sub('\D', '', f)))
 #image_files =image_files[:1]
-image_files =image_files[:110:10]  #every nth image
+image_files =image_files[20:120:20]  #every nth image
 
 #-------------
 
@@ -577,22 +579,54 @@ def calc_median_map(maps, min_num =3):
     print ('Median map calculateion completed with ' , str(cnt), ' dots' )                
     return output
 
+def calc_unit_spacing(map_xy_offset):
+    #calculate unit spacing at each location, used to calibrate the spacing from px to degree 
+    xi_full, yi_full, dim = map_xy_offset.shape
+    xi_range = int((xi_full -1)/2)
+    yi_range = int((yi_full -1)/2)    
+
+    map_unit = np.empty((xi_full,yi_full))
+    map_unit[:,:] =np.nan
+    
+    for i in range(xi_full):
+        for j in range(yi_full):
+            map_unit[i,j] = np.sqrt((map_xy_offset[i,j,0]**2 + map_xy_offset[i,j,1]**2) / ((i-xi_range)**2 + (j-yi_range)**2))
+    
+    return map_unit
+
+def calc_distance(map_xy1, map_xy0):
+    #calculate distance of each locations in px
+    xi_full, yi_full, dim = map_xy0.shape
+    #xi_range = int((xi_full -1)/2)
+    #yi_range = int((yi_full -1)/2)    
+
+    map_distance = np.empty((xi_full,yi_full))
+    map_distance[:,:] =np.nan
+    
+    map_xy_delta = map_xy1 - map_xy0
+    
+    for i in range(xi_full):
+        for j in range(yi_full):
+            map_distance[i,j] = np.sqrt((map_xy_delta[i,j,0]**2 + map_xy_delta[i,j,1]**2))
+    
+    return map_distance
+
 def plot_map_norm(map_norm, fname_str=''):
     
     xi_full, yi_full, dim = map_norm.shape
     xi_range = int((xi_full -1)/2)
     yi_range = int((yi_full -1)/2)
     X,Y =np.meshgrid(np.linspace(-xi_range,xi_range,xi_full),np.linspace(-yi_range,yi_range,yi_full))
+    #map_norm = np.ma.array(map_norm, mask=np.isnan(map_norm))
     
     for i in [0,1]: #x,y
-
         if i ==0:
             axis = "x"
         else:
             axis = "y"
-        fig=plt.figure(dpi=200) #figsize=(5, 5),
+        fig=plt.figure(figsize=(5, 5),dpi=200) #figsize=(5, 5),
         ax = fig.add_subplot(111)
-        plt.title('Normalized'+ axis + '-Spacing Change')
+        plt.title('Normalized '+ axis + '-Spacing Change')
         plt.xlabel('xi')
         plt.ylabel('yi')
         levels = np.linspace(0.95, 1.05, 11)
@@ -613,18 +647,88 @@ def plot_map_norm(map_norm, fname_str=''):
         plt.grid(color='grey', linestyle='dashed', linewidth=0.2)
         plt.rcParams["font.size"] = "5"
         plt.colorbar()
-        plt.savefig(os.path.join(output_path, fname_str + '_' + axis +'.png'))
+        plt.savefig(os.path.join(output_path, 'Normalized_Map_'+fname_str + axis +'.png'))
         #plt.show()
-        
-        
-
+ 
+def plot_map_global(map_global, fname_str=''):
     
+    xi_full, yi_full = map_global.shape
+    xi_range = int((xi_full -1)/2)
+    yi_range = int((yi_full -1)/2)
+    X,Y =np.meshgrid(np.linspace(-xi_range,xi_range,xi_full),np.linspace(-yi_range,yi_range,yi_full))
+    #map_global = np.ma.array(map_global, mask=np.isnan(map_global))
+
+    fig=plt.figure(figsize=(5, 5),dpi=200) #figsize=(5, 5),
+    ax = fig.add_subplot(111)
+    plt.title('Global PS Map '+fname_str+' [degree]')
+    plt.xlabel('xi')
+    plt.ylabel('yi')
+    levels = np.linspace(0, 1.0, 6)
+    plt.contourf(X,Y,map_global[:,:].T,levels=levels, cmap ='coolwarm',extend ='max')  #cmap ='coolwarm','bwr'
+    ax.set_aspect('equal')
+
+    plt.xlim(-xi_range, xi_range)
+    plt.ylim(yi_range, -yi_range)
+    
+    radii = [25,45]
+
+    for radius in radii:    
+        theta = np.linspace(0, 2*np.pi, 100)
+        a = radius*np.cos(theta)
+        b = radius*np.sin(theta)
+        plt.plot(a, b,color='green', linestyle=(0, (5, 5)), linewidth=0.4)  #'loosely dotted'
+        
+    plt.grid(color='grey', linestyle='dashed', linewidth=0.2)
+    plt.rcParams["font.size"] = "5"
+    plt.colorbar()
+    plt.savefig(os.path.join(output_path, 'Global_PS_Map_'+fname_str +'.png'))       
+ 
+    
+def plot_map_visual(map_xy, map_norm, fname_str=''):
+    
+    xi_full, yi_full, dim = map_xy.shape
+    #xi_range = int((xi_full -1)/2)
+    #yi_range = int((yi_full -1)/2)
+    #X,Y =np.meshgrid(np.linspace(-xi_range,xi_range,xi_full),np.linspace(-yi_range,yi_range,yi_full))
+    #map_norm = np.ma.array(map_norm, mask=np.isnan(map_norm))
+    
+    for i in [0,1]: #x,y
+        if i ==0:
+            axis = "x"
+        else:
+            axis = "y"
+        fig=plt.figure(figsize=(5, 5),dpi=200) #figsize=(5, 5),
+        ax = fig.add_subplot(111)
+        plt.title('Normalized '+ axis + '-Spacing Change')
+        plt.xlabel('xi')
+        plt.ylabel('yi')
+        levels = np.linspace(0.99, 1.02, 3)
+        Z= map_norm[:,:,i].flatten()
+        X= map_xy[:,:,0].flatten()
+        Y= map_xy[:,:,1].flatten()
+        
+        contours = plt.contour(X[~np.isnan(Z)],Y[~np.isnan(Z)],Z[~np.isnan(Z)],levels=levels, cmap='bwr')  #cmap ='coolwarm','bwr'
+        plt.clabel(contours, inline=True, fontsize=5)
+        #ax.set_aspect('equal')
+    
+        #plt.xlim(-xi_range, xi_range)
+        #plt.ylim(yi_range, -yi_range)
+            
+        #plt.grid(color='grey', linestyle='dashed', linewidth=0.2)
+        plt.rcParams["font.size"] = "5"
+        #plt.colorbar()
+        plt.savefig(os.path.join(output_path, 'Visual_Map_'+fname_str + axis +'.png')) 
+
+
+
     
 if __name__ == '__main__':
     start_time = time.monotonic()
     df = pd.DataFrame()
     cnt = 0
+    maps_xy =[]
     maps_dxdy =[]
+    #frames =[]
     for image_file in image_files:
         frame_num = ((image_file.split(os.path.sep)[-1].split('_'))[-1].split('.tiff'))[0]
         image = cv2.imread(os.path.join(current_path, image_file))
@@ -665,10 +769,13 @@ if __name__ == '__main__':
         frame.draw_lines_on_image(image, width, height, filename=frame_num+'_grouped.jpeg')
         frame.find_index()
         print('Finished indexing calculations for frame', frame_num)
+        
+        # generate maps
         frame.generate_map_xy()
+        maps_xy.append(frame.map_xy)
         frame.generate_map_dxdy(4)  #4x spacing
         maps_dxdy.append(frame.map_dxdy)
-
+        #frames.append(frame)
         
         # Prepare to save results
         x, y, xi, yi, size = [], [], [], [], []
@@ -700,10 +807,28 @@ if __name__ == '__main__':
         df = pd.concat([df, mini_df])
         print('Total frames processed is', str(cnt), '/', len(image_files))
     
-        
+    #FOV fitting
+    center_frame_index =3
+    
+    #Normalize map_dxdy for local PS 
     map_dxdy_median = calc_median_map(maps_dxdy, min_num =1)
-    map_dxdy_norm = maps_dxdy[5] / map_dxdy_median
-    plot_map_norm(map_dxdy_norm, filename = "")
+    map_dxdy_norm = maps_dxdy[center_frame_index] / map_dxdy_median
+    plot_map_norm(map_dxdy_norm)
+    
+    #Global PS
+    offset = maps_xy[center_frame_index][60,60,:]
+    map_xy_center_offset = maps_xy[center_frame_index] - offset
+    map_unit = calc_unit_spacing(map_xy_center_offset)
+    
+    for i in [0,-1]: #first and last frame
+        map_xy = maps_xy[i]
+        map_xy_offset = map_xy- map_xy[60,60,:]
+        map_distance = calc_distance(map_xy_offset, map_xy_center_offset)
+        map_global = map_distance / map_unit
+        plot_map_global(map_global, fname_str= str(i))
+    
+    # generate visual aid contour images
+    
     
     
     df.to_csv(csv_file)
