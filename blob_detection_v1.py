@@ -23,6 +23,7 @@ import time
 from datetime import timedelta
 from skimage.transform import radon
 from scipy.interpolate import griddata
+import csv
 
 
 class Frame:
@@ -157,12 +158,12 @@ class Frame:
         
         x, y = self.get_x_y()
         hor_lines = get_lines(x, y, self.hor_slope)
-        print(len(hor_lines))
+        #print(len(hor_lines))
         self.hor_lines = [list(map(tuple, line)) for line in hor_lines]
         
         x, y = self.get_x_y()
         ver_lines = get_lines(x, y, self.ver_slope, ver=True)
-        print(len(ver_lines))
+        #print(len(ver_lines))
         self.ver_lines = [list(map(tuple, line)) for line in ver_lines]
         
         return self.hor_lines, self.ver_lines
@@ -187,11 +188,14 @@ class Frame:
             pseudo_center_pt = common_pts[np.argmin(dist_2)]
             center_dot_hi = np.asarray([i_line for i_line, line in enumerate(self.hor_lines) if pseudo_center_pt in line])
             center_dot_vi = np.asarray([i_line for i_line, line in enumerate(self.ver_lines) if pseudo_center_pt in line])
+            return [],[]
         
         for pt in common_pts:
             hi = np.asarray([i_line for i_line, line in enumerate(self.hor_lines) if pt in line])
             vi = np.asarray([i_line for i_line, line in enumerate(self.ver_lines) if pt in line])
             self.dotsxy_indexed[pt] = list(zip(vi - center_dot_vi, hi - center_dot_hi))
+        
+        return vi - center_dot_vi , hi - center_dot_hi
             
     def generate_map_xy(self):
         # from indexed dots to generate xy coordinate map
@@ -253,6 +257,7 @@ image_files = ['test4.tiff']
 input_path = current_path
 output_path = current_path
 driver = 'FATP'
+dxdy_spacing = 4
 
 
 #----Xuan test------
@@ -272,8 +277,9 @@ image_files =image_files[20:120:20]  #every nth image
 #-------------
 
 log_file = 'Detection Log_' + time.strftime('%Y%m%d-%H%M%S') + '.txt'
-csv_file = os.path.join(output_path, time.strftime('%Y%m%d-%H%M%S') + '_indexed_dots.csv')
-
+csv_file = os.path.join(output_path, 'dots.csv')
+csv_file_frame = os.path.join(output_path, 'frames.csv')
+csv_file_summary = os.path.join(output_path, 'summary.csv')
 
 # dot_params = {'min_dist' : 3,
 #               'min_threshold' : 9, 
@@ -579,31 +585,29 @@ def calc_median_map(maps, min_num =3):
     print ('Median map calculateion completed with ' , str(cnt), ' dots' )                
     return output
 
-def calc_unit_spacing(map_xy_offset):
-    #calculate unit spacing at each location, used to calibrate the spacing from px to degree 
-    xi_full, yi_full, dim = map_xy_offset.shape
-    xi_range = int((xi_full -1)/2)
-    yi_range = int((yi_full -1)/2)    
+# def calc_unit_spacing(map_xy_offset):
+#     #calculate unit spacing at each location, used to calibrate the spacing from px to degree 
+#     xi_full, yi_full, dim = map_xy_offset.shape
+#     xi_range = int((xi_full -1)/2)
+#     yi_range = int((yi_full -1)/2)    
 
-    map_unit = np.empty((xi_full,yi_full))
-    map_unit[:,:] =np.nan
+#     map_unit = np.empty((xi_full,yi_full))
+#     map_unit[:,:] =np.nan
     
-    for i in range(xi_full):
-        for j in range(yi_full):
-            map_unit[i,j] = np.sqrt((map_xy_offset[i,j,0]**2 + map_xy_offset[i,j,1]**2) / ((i-xi_range)**2 + (j-yi_range)**2))
+#     for i in range(xi_full):
+#         for j in range(yi_full):
+#             map_unit[i,j] = np.sqrt((map_xy_offset[i,j,0]**2 + map_xy_offset[i,j,1]**2) / ((i-xi_range)**2 + (j-yi_range)**2))
     
-    return map_unit
+#     return map_unit
 
-def calc_distance(map_xy1, map_xy0):
-    #calculate distance of each locations in px
-    xi_full, yi_full, dim = map_xy0.shape
-    #xi_range = int((xi_full -1)/2)
-    #yi_range = int((yi_full -1)/2)    
+def calc_distance(map_xy, ref0):
+    #calculate distance map, relative to ref0, ref0 could be map of same shape, or x,y coor 1-dim array
+    xi_full, yi_full, _ = map_xy.shape
 
     map_distance = np.empty((xi_full,yi_full))
     map_distance[:,:] =np.nan
     
-    map_xy_delta = map_xy1 - map_xy0
+    map_xy_delta = map_xy - ref0
     
     for i in range(xi_full):
         for j in range(yi_full):
@@ -683,54 +687,67 @@ def plot_map_global(map_global, fname_str=''):
     plt.colorbar()
     plt.savefig(os.path.join(output_path, 'Global_PS_Map_'+fname_str +'.png'))       
  
+def offset_map_fov (map_input, xi_fov,yi_fov):
+    #offset map and create FOV map (center of display)
+    map_output = shift_fillnan (map_input, int(np.round(-xi_fov)), axis=0) #shift map relative to FOV 
+    map_output = shift_fillnan (map_output, int(np.round(-yi_fov)), axis=1)
     
-def plot_map_visual(map_xy, map_norm, fname_str=''):
+    return map_output
     
-    xi_full, yi_full, dim = map_xy.shape
-    #xi_range = int((xi_full -1)/2)
-    #yi_range = int((yi_full -1)/2)
-    #X,Y =np.meshgrid(np.linspace(-xi_range,xi_range,xi_full),np.linspace(-yi_range,yi_range,yi_full))
-    #map_norm = np.ma.array(map_norm, mask=np.isnan(map_norm))
+def calc_parametrics_local (map_local, map_fov):
+    #calculate the parametrics based on the map
+    summary ={}
+    #zones =[]
+    start_r =-1
+    radii = [25,35,45,60]  #need to start from small to large
+    axis = ['x','y']
+    th = [1,5]  #in percent
     
-    for i in [0,1]: #x,y
-        if i ==0:
-            axis = "x"
-        else:
-            axis = "y"
-        fig=plt.figure(figsize=(5, 5),dpi=200) #figsize=(5, 5),
-        ax = fig.add_subplot(111)
-        plt.title('Normalized '+ axis + '-Spacing Change')
-        plt.xlabel('xi')
-        plt.ylabel('yi')
-        levels = np.linspace(0.99, 1.02, 3)
-        Z= map_norm[:,:,i].flatten()
-        X= map_xy[:,:,0].flatten()
-        Y= map_xy[:,:,1].flatten()
+    #define zones
+    for i in range(len(radii)):
+        zone =  (map_fov > start_r) * (map_fov <= radii[i])
+        #zones.append(zone)
+        start_r = radii[i]
         
-        contours = plt.contour(X[~np.isnan(Z)],Y[~np.isnan(Z)],Z[~np.isnan(Z)],levels=levels, cmap='bwr')  #cmap ='coolwarm','bwr'
-        plt.clabel(contours, inline=True, fontsize=5)
-        #ax.set_aspect('equal')
-    
-        #plt.xlim(-xi_range, xi_range)
-        #plt.ylim(yi_range, -yi_range)
+        mapp_both_x =[]
+        for j in range(len(axis)):
             
-        #plt.grid(color='grey', linestyle='dashed', linewidth=0.2)
-        plt.rcParams["font.size"] = "5"
-        #plt.colorbar()
-        plt.savefig(os.path.join(output_path, 'Visual_Map_'+fname_str + axis +'.png')) 
-
-
-
+            mapp = map_local[:,:,j]
+            summary['local_areatotal_d'+axis[j]+'_'+str(radii[i])]= np.count_nonzero(~np.isnan(mapp[zone]))
+            summary['local_max_d'+axis[j]+'_'+str(radii[i])]= (np.nanmax(mapp[zone])-1)*100
+            summary['local_min_d'+axis[j]+'_'+str(radii[i])]= (np.nanmin(mapp[zone])-1)*100
+            summary['local_pct99_d'+axis[j]+'_'+str(radii[i])]= (np.nanpercentile(mapp[zone],99) -1)*100
+            summary['local_pct1_d'+axis[j]+'_'+str(radii[i])]= (np.nanpercentile(mapp[zone],1) -1)*100
+            summary['local_rms_d'+axis[j]+'_'+str(radii[i])]= (np.nanstd(mapp[zone]))*100
+            
+            
+            for k in range(len(th)): 
+                mapp_pos = (mapp>=1+th[k]/100) * zone
+                mapp_neg = (mapp<=1-th[k]/100) * zone
+                mapp_both = ((mapp>=1+th[k]/100) + (mapp<=1-th[k]/100))* zone
+                summary['local_area_d'+axis[j]+'_th'+str(th[k])+'pctpos_'+str(radii[i])]= np.count_nonzero(mapp_pos)
+                summary['local_area_d'+axis[j]+'_th'+str(th[k])+'pctneg_'+str(radii[i])]= np.count_nonzero(mapp_neg)
+                summary['local_area_d'+axis[j]+'_th'+str(th[k])+'pct_'+str(radii[i])]= np.count_nonzero(mapp_both)
+                if j ==0: # save x maps
+                    mapp_both_x.append(mapp_both)
+                elif j==1: 
+                    mapp_both_combine = mapp_both + mapp_both_x[k]
+                    summary['local_area_combined_th'+str(th[k])+'pct_'+str(radii[i])]= np.count_nonzero(mapp_both_combine)
+                
+    return summary
     
 if __name__ == '__main__':
     start_time = time.monotonic()
-    df = pd.DataFrame()
+    df = pd.DataFrame() #raw data, 1 blob per line
+    df_frame = pd.DataFrame() #frame summary data, 1 frame per line
     cnt = 0
     maps_xy =[]
     maps_dxdy =[]
     #frames =[]
     for image_file in image_files:
         frame_num = ((image_file.split(os.path.sep)[-1].split('_'))[-1].split('.tiff'))[0]
+        df_frame_mini = pd.DataFrame({'frame_num':[frame_num],'index':[cnt]})
+        #df_frame_mini['frame_num'] = frame_num
         image = cv2.imread(os.path.join(current_path, image_file))
         
         if driver =="MODEL":
@@ -742,11 +759,16 @@ if __name__ == '__main__':
         print('Frame', frame_num, ': Processing started')
         height, width, _ = image.shape
         
+        
+        # ------Blob Detection --------------
         frame = find_dots(image)
         print('Frame', frame_num, ': Finding dots is complete, found ', str(len(frame.dots)), 'dots')
+        df_frame_mini['total_dots'] = len(frame.dots)
         
         frame.center_dot = find_center_dot(frame.dots, height, width)
         print('Frame', frame_num, ': Center dot was found at ', frame.center_dot.__str__())
+        df_frame_mini['center_dot_x'] = frame.center_dot.x
+        df_frame_mini['center_dot_y'] = frame.center_dot.y
         
         fov_dot = find_fov(image, height, width)
         print('Frame', frame_num, ': Finding fov dot is complete')
@@ -756,24 +778,40 @@ if __name__ == '__main__':
             draw_dots(image, [fov_dot], filename=frame_num+'_fov.jpeg') # For debugging FOV dot detection
         
         draw_dots(image, frame.dots, filename=frame_num+'_dots.jpeg') # For debugging blob detection
+        df_frame_mini['fov_dot_x'] = fov_dot.x
+        df_frame_mini['fov_dot_y'] = fov_dot.y       
         
+        
+        #--------Group, indexing ----------------
         med_size, med_dist = frame.calc_dot_size_dist()
         print('Dot Size:', med_size, 'Distance:', med_dist)
+        df_frame_mini['median_dot_size'] = med_size
+        df_frame_mini['median_dot_spacing'] = med_dist
         
         print('Starting slope calculations for frame', frame_num)
         proc = prep_image(image, normalize_and_filter=True, binarize=False)
         init_hor_slope, init_ver_slope, hor_dist_error, ver_dist_error = get_initial_slopes(proc, height, width, ratio=0.3)
         hor_slope, ver_slope = frame.get_slopes(init_hor_slope, init_ver_slope, hor_dist_error, ver_dist_error)
         print('HSlope:', hor_slope, 'VSlope:', ver_slope)
+        df_frame_mini['hor_slope'] = hor_slope
+        df_frame_mini['ver_slope'] = ver_slope        
+        
         hor_lines, ver_lines = frame.group_lines()
         frame.draw_lines_on_image(image, width, height, filename=frame_num+'_grouped.jpeg')
-        frame.find_index()
+        vi, hi = frame.find_index()
         print('Finished indexing calculations for frame', frame_num)
+        if vi != []:
+            df_frame_mini['yi_max'] = np.max(vi)
+            df_frame_mini['yi_min'] = np.min(vi)
+        if hi != []:
+            df_frame_mini['xi_max'] = np.max(vi)
+            df_frame_mini['xi_min'] = np.min(vi)
         
         # generate maps
         frame.generate_map_xy()
         maps_xy.append(frame.map_xy)
-        frame.generate_map_dxdy(4)  #4x spacing
+        frame.generate_map_dxdy(dxdy_spacing)  #4x spacing
+        df_frame_mini['dxdy_spacing'] = dxdy_spacing
         maps_dxdy.append(frame.map_dxdy)
         #frames.append(frame)
         
@@ -797,41 +835,76 @@ if __name__ == '__main__':
         # Write results to dataframe and csv
         mini_df = pd.DataFrame({'x' : x, 'y' : y, 'size' : size, 'xi' : xi, 'yi' : yi})
         mini_df['frame_num'] = frame_num
-        try:
-            mini_df['x_fov'] = fov_dot.x
-            mini_df['y_fov'] = fov_dot.y
-        except AttributeError:
-            mini_df['x_fov'] = np.nan
-            mini_df['y_fov'] = np.nan   
         cnt += 1
         df = pd.concat([df, mini_df])
+        df_frame = pd.concat([df_frame, df_frame_mini])
         print('Total frames processed is', str(cnt), '/', len(image_files))
     
-    #FOV fitting
-    center_frame_index =3
+    #determine center dot and FOV, mark outliers
+    median_center_x = np.median(df_frame['center_dot_x'])  #median of center locations, use this to determine center dot outlier
+    median_center_y = np.median(df_frame['center_dot_y'])
+    if median_center_x > 2/3* width or median_center_x < 1/3* width or median_center_y > 2/3* height or median_center_y < 1/3* height: 
+        raise Exception("Error: Center dot outside of ROI (middle 1/3)")
+    df_frame['d_center_dots'] = np.nan
+    df_frame['d_fov_center'] = np.nan
+    df_frame['flag_center_dot_outlier'] = 0
+    df_frame['flag_fov_dot_outlier']= 0
+    for i in range(len(df_frame)):
+        # determine if center dot is outlier based on distance to the median locatioin, if >50px, mark as outlier
+        df_frame['d_center_dots'].iloc[i] = np.sqrt((df_frame['center_dot_x'].iloc[i] - median_center_x)**2 + (df_frame['center_dot_y'].iloc[i] - median_center_y)**2)
+        if df_frame['d_center_dots'].iloc[i] >50:
+            df_frame['flag_center_dot_outlier'].iloc[i] = 1
+            print ('Warning: center dot outlier detected on frame# ', str(df_frame['frame_num'].iloc[i]))
+
+        # determine if FOV dot is outlier, if d<25px, mark as outlier, if y distance >200px, outlier   
+        df_frame['d_fov_center'].iloc[i] = np.sqrt((df_frame['fov_dot_x'].iloc[i] - df_frame['center_dot_x'].iloc[i])**2 + (df_frame['fov_dot_y'].iloc[i] - df_frame['center_dot_y'].iloc[i])**2)        
+        if df_frame['d_fov_center'].iloc[i] <25 or np.abs(df_frame['fov_dot_y'].iloc[i] - df_frame['center_dot_y'].iloc[i]) > 200:
+            df_frame['flag_fov_dot_outlier'].iloc[i] = 1
+            print ('Warning: FOV dot outlier detected on frame# ', str(df_frame['frame_num'].iloc[i]))
+  
+    xx, yy = np.meshgrid(np.linspace(-60, 60, 121), np.linspace(-60, 60, 121))
+    map_fov = np.sqrt(xx**2 + yy**2)
+    
+    #find middle frame by min(d_fov_center)
+    min_d_fov_center = np.min(df_frame['d_fov_center'][df_frame['flag_center_dot_outlier']==0][df_frame['flag_fov_dot_outlier']==0])
+    center_frame_index = df_frame['index'][df_frame['d_fov_center'] == min_d_fov_center].tolist()[0]
+    summary= df_frame[df_frame['index']==center_frame_index].to_dict(orient='records')[0]  #generate summary dict starting w center frame info 
+    
+    map_dxdy_median = calc_median_map(maps_dxdy, min_num =1)
+    unitspacing_xy = map_dxdy_median[60,60]/dxdy_spacing
+    
+    [xi_fov,yi_fov] = [summary['fov_dot_x'] - summary['center_dot_x'],summary['fov_dot_y'] - summary['center_dot_y']]/unitspacing_xy
+    summary['xi_fov'] = xi_fov
+    summary['yi_fov'] = yi_fov
+    print ('Middle frame found: #', str(summary['frame_num']),'; FOV dot @index ', [xi_fov,yi_fov])
     
     #Normalize map_dxdy for local PS 
-    map_dxdy_median = calc_median_map(maps_dxdy, min_num =1)
     map_dxdy_norm = maps_dxdy[center_frame_index] / map_dxdy_median
-    plot_map_norm(map_dxdy_norm)
+    map_dxdy_norm_fov = offset_map_fov(map_dxdy_norm, xi_fov, yi_fov)
+    plot_map_norm(map_dxdy_norm_fov)
+    summary_local = calc_parametrics_local (map_dxdy_norm_fov, map_fov)
+    summary.update(summary_local)
     
     #Global PS
-    offset = maps_xy[center_frame_index][60,60,:]
-    map_xy_center_offset = maps_xy[center_frame_index] - offset
-    map_unit = calc_unit_spacing(map_xy_center_offset)
+    map_distance = calc_distance(maps_xy[center_frame_index], maps_xy[center_frame_index][60,60,:])
+    map_unit = map_distance / map_fov
+
     
     for i in [0,-1]: #first and last frame
-        map_xy = maps_xy[i]
-        map_xy_offset = map_xy- map_xy[60,60,:]
-        map_distance = calc_distance(map_xy_offset, map_xy_center_offset)
-        map_global = map_distance / map_unit
+        map_delta_global = maps_xy[i] - maps_xy[center_frame_index]
+        map_distance_global = calc_distance(map_delta_global, map_delta_global[60,60,:])
+        map_global = map_distance_global  / map_unit
+        map_global = offset_map_fov(map_global, xi_fov, yi_fov)
         plot_map_global(map_global, fname_str= str(i))
-    
-    # generate visual aid contour images
-    
-    
+
+
     
     df.to_csv(csv_file)
+    df_frame.to_csv(csv_file_frame)
+    with open(csv_file_summary, 'w') as f:  # You will need 'wb' mode in Python 2.x
+        w = csv.DictWriter(f, summary.keys())
+        w.writeheader()
+        w.writerow(summary)
     end_time = time.monotonic()
     print(timedelta(seconds=end_time - start_time))
     
