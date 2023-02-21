@@ -735,6 +735,26 @@ def calc_parametrics_local (map_local, map_fov):
                     summary['local_area_combined_th'+str(th[k])+'pct_'+str(radii[i])]= np.count_nonzero(mapp_both_combine)
                 
     return summary
+
+
+def calc_parametrics_global (map_global, map_fov, label, frame_num):
+    #calculate the parametrics based on the map    
+    summary ={}
+    start_r =-1
+    radii = [25,35,45,60]  #need to start from small to large
+    #axis = ['x','y']
+    #th = [1,5]  #in percent
+    summary['global_'+label+'_frame_num']= frame_num
+    
+    #define zones
+    for i in range(len(radii)):
+        zone =  (map_fov > start_r) * (map_fov <= radii[i])
+        start_r = radii[i]
+        summary['global_'+label+'_max_'+str(radii[i])]= np.nanmax(map_global[zone])
+        summary['global_'+label+'_pct99_'+str(radii[i])]= np.nanpercentile(map_global[zone],99)
+        summary['global_'+label+'_median_'+str(radii[i])]= np.nanpercentile(map_global[zone],50)
+
+    return summary
     
 if __name__ == '__main__':
     start_time = time.monotonic()
@@ -743,9 +763,11 @@ if __name__ == '__main__':
     cnt = 0
     maps_xy =[]
     maps_dxdy =[]
+    frame_nums =[]
     #frames =[]
     for image_file in image_files:
         frame_num = ((image_file.split(os.path.sep)[-1].split('_'))[-1].split('.tiff'))[0]
+        frame_nums.append(frame_num)
         df_frame_mini = pd.DataFrame({'frame_num':[frame_num],'index':[cnt]})
         #df_frame_mini['frame_num'] = frame_num
         image = cv2.imread(os.path.join(current_path, image_file))
@@ -881,9 +903,12 @@ if __name__ == '__main__':
     #Normalize map_dxdy for local PS 
     map_dxdy_norm = maps_dxdy[center_frame_index] / map_dxdy_median
     map_dxdy_norm_fov = offset_map_fov(map_dxdy_norm, xi_fov, yi_fov)
-    plot_map_norm(map_dxdy_norm_fov)
     summary_local = calc_parametrics_local (map_dxdy_norm_fov, map_fov)
     summary.update(summary_local)
+    try: 
+        plot_map_norm(map_dxdy_norm_fov)
+    except ValueError:
+        print('Error: plot local PS map')
     
     #Global PS
     map_distance = calc_distance(maps_xy[center_frame_index], maps_xy[center_frame_index][60,60,:])
@@ -891,13 +916,22 @@ if __name__ == '__main__':
 
     
     for i in [0,-1]: #first and last frame
+        if i ==0:
+            label = 'gazeright'
+        else:
+            label = 'gazeleft'
+        frame_num = frame_nums[i]
         map_delta_global = maps_xy[i] - maps_xy[center_frame_index]
         map_distance_global = calc_distance(map_delta_global, map_delta_global[60,60,:])
         map_global = map_distance_global  / map_unit
         map_global = offset_map_fov(map_global, xi_fov, yi_fov)
-        plot_map_global(map_global, fname_str= str(i))
-
-
+        summary_global = calc_parametrics_global (map_global, map_fov, label, frame_num)
+        summary.update(summary_global)
+        try:
+            plot_map_global(map_global, fname_str= label)
+        except ValueError:
+            print('Error: plot globle PS map')
+    
     
     df.to_csv(csv_file)
     df_frame.to_csv(csv_file_frame)
