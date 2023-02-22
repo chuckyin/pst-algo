@@ -272,7 +272,7 @@ if not os.path.exists(output_path):
 image_files = glob.glob(input_path + '*.tiff')
 image_files.sort(key=lambda f: int(re.sub('\D', '', f)))
 #image_files =image_files[:1]
-image_files =image_files[20:120:20]  #every nth image
+image_files =image_files[::15]  #every nth image
 
 #-------------
 
@@ -888,7 +888,7 @@ if __name__ == '__main__':
     map_fov = np.sqrt(xx**2 + yy**2)
     
     #find middle frame by min(d_fov_center)
-    min_d_fov_center = np.min(df_frame['d_fov_center'][df_frame['flag_center_dot_outlier']==0][df_frame['flag_fov_dot_outlier']==0])
+    min_d_fov_center = np.min(df_frame['d_fov_center'][(df_frame['flag_center_dot_outlier']==0) & (df_frame['flag_fov_dot_outlier']==0)])
     center_frame_index = df_frame['index'][df_frame['d_fov_center'] == min_d_fov_center].tolist()[0]
     summary= df_frame[df_frame['index']==center_frame_index].to_dict(orient='records')[0]  #generate summary dict starting w center frame info 
     
