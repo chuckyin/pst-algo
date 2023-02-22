@@ -263,6 +263,10 @@ dxdy_spacing = 4
 #----Xuan test------
 
 current_path = r'/Users/xuawang/Dropbox (Meta)/Pupil Swim Metrology/PST/20221121 2d dots 60deg/Arcata EVT2 A/test2_55p5/'
+current_path = r'/Users/xuawang/Dropbox (Meta)/Pupil Swim Metrology/PST/20221111 Arcata P3 Y/AV1240m/dots_13p8ms_25dbGain/'
+current_path = r'/Users/xuawang/Dropbox (Meta)/Pupil Swim Metrology/PST/20230111 Arcata P2 B/dots_55ms_15dbGain/'
+#current_path = r'/Users/xuawang/Dropbox (Meta)/Pupil Swim Metrology/PST/20230111 Arcata P2 C/dots_55p5ms_15dbGain/'
+
 
 input_path = current_path
 output_path = os.path.join(current_path, 'output' + '/')
@@ -297,12 +301,12 @@ dot_params = {"min_dist": 3,
               "min_threshold":1,
               "max_threshold": 1000,
               "threshold_step":2, 
-              "min_area":50, 
+              "min_area":30, 
               "max_area": 2000, 
               "invert" : True, 
               "subtract_median": False,
               "filter_byconvexity": True, 
-              "min_convexity": 0.75, 
+              "min_convexity": 0.6, 
               "filter_bycircularity": False}
 
 
@@ -387,7 +391,7 @@ def find_fov(image, height, width):
         M_inner = cv2.moments(contours[inner_c_index])
         M_outer = cv2.moments(contours[outer_c_index])
     except TypeError:
-        return None
+        return Dot(0, 0, 0)
     
     fov_x = int(M_inner['m10'] / M_inner['m00'])
     fov_y = int(M_inner['m01'] / M_inner['m00']) + roi_hei
@@ -884,11 +888,16 @@ if __name__ == '__main__':
             df_frame['flag_fov_dot_outlier'].iloc[i] = 1
             print ('Warning: FOV dot outlier detected on frame# ', str(df_frame['frame_num'].iloc[i]))
   
+    df.to_csv(csv_file)
+    df_frame.to_csv(csv_file_frame)
+
+
     xx, yy = np.meshgrid(np.linspace(-60, 60, 121), np.linspace(-60, 60, 121))
     map_fov = np.sqrt(xx**2 + yy**2)
     
     #find middle frame by min(d_fov_center)
-    min_d_fov_center = np.min(df_frame['d_fov_center'][(df_frame['flag_center_dot_outlier']==0) & (df_frame['flag_fov_dot_outlier']==0)])
+    df_frame = df_frame[(df_frame['flag_center_dot_outlier']==0) & (df_frame['flag_fov_dot_outlier']==0)]
+    min_d_fov_center = np.min(df_frame['d_fov_center'])
     center_frame_index = df_frame['index'][df_frame['d_fov_center'] == min_d_fov_center].tolist()[0]
     summary= df_frame[df_frame['index']==center_frame_index].to_dict(orient='records')[0]  #generate summary dict starting w center frame info 
     
@@ -920,8 +929,10 @@ if __name__ == '__main__':
             label = 'gazeright'
         else:
             label = 'gazeleft'
-        frame_num = frame_nums[i]
-        map_delta_global = maps_xy[i] - maps_xy[center_frame_index]
+        #frame_num = frame_nums[i]
+        frame_num = df_frame['frame_num'].values[i]
+        index = df_frame['index'].values[i]
+        map_delta_global = maps_xy[index] - maps_xy[center_frame_index]
         map_distance_global = calc_distance(map_delta_global, map_delta_global[60,60,:])
         map_global = map_distance_global  / map_unit
         map_global = offset_map_fov(map_global, xi_fov, yi_fov)
@@ -933,8 +944,7 @@ if __name__ == '__main__':
             print('Error: plot globle PS map')
     
     
-    df.to_csv(csv_file)
-    df_frame.to_csv(csv_file_frame)
+
     with open(csv_file_summary, 'w') as f:  # You will need 'wb' mode in Python 2.x
         w = csv.DictWriter(f, summary.keys())
         w.writeheader()
