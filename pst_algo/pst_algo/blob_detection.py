@@ -10,16 +10,11 @@ Created on Mon Nov 28 17:27:06 2022
 """
 
 import os
-import sys
-import glob
 import cv2
 import numpy as np
-import pandas as pd
-import matplotlib.pyplot as plt
-import re
-import time
+import config.config as cf
+import pst_algo.__main__ as mn
 
-from datetime import timedelta
 from skimage.transform import radon
 
 
@@ -34,12 +29,18 @@ class Frame:
         self.hor_lines = None
         self.ver_lines = None
         self.dotsxy_indexed = {}  # key(x, y) : value(xi, yi)
+        self.xi_range =60
+        self.yi_range =60
+        self.map_xy = np.empty((self.xi_range*2+1,self.yi_range*2+1,2)) # init map w +/-60 deg
+        self.map_xy[:,:,:] =np.nan
+        self.map_dxdy = np.empty((self.xi_range*2+1,self.yi_range*2+1,2))
+        self.map_dxdy[:,:,:] =np.nan
    
         
     def get_x_y(self, inv=False):
         if inv:
             y = np.asarray([dot.x for dot in self.dots])
-            x = np.asarray([dot.y for dot in self.dots])  
+            x = np.asarray([dot.y for dot in self.dots])
         else:
             x = np.asarray([dot.x for dot in self.dots])
             y = np.asarray([dot.y for dot in self.dots])
@@ -48,7 +49,7 @@ class Frame:
     
        
     def calc_dot_size_dist(self):
-        x, y = self.get_x_y()        
+        x, y = self.get_x_y()
         sq_dist = np.gradient(x) ** 2 + np.gradient(y) ** 2
         
         self.med_dot_dist = np.median(np.sqrt(sq_dist))
@@ -58,7 +59,7 @@ class Frame:
     
     
     def get_slopes(self, init_hor_slope, init_ver_slope, hor_dist_error, ver_dist_error):
-        def calc_slopes(x, y, slope, error, ver=False):    
+        def calc_slopes(x, y, slope, error):
             mean_x = np.mean(x)
             mean_y = np.mean(y)
             index_mid_dot = np.argsort(np.sqrt((mean_x - x) ** 2
@@ -70,31 +71,25 @@ class Frame:
                         - slope * used_dot_x
             list_dist = np.abs(slope * x - y + list_tmp2) / list_tmp
             dots_selected = [dot for i, dot in enumerate(self.dots) if list_dist[i] < error]
-            if ver:
-                dots_selected_y = np.asarray([dot.x for dot in dots_selected])
-                dots_selected_x = np.asarray([dot.y for dot in dots_selected])
-            else:
-                dots_selected_x = np.asarray([-dot.x for dot in dots_selected])
-                dots_selected_y = np.asarray([-dot.y for dot in dots_selected])    
+            dots_selected_x = np.asarray([dot.x for dot in dots_selected])
+            dots_selected_y = np.asarray([dot.y for dot in dots_selected])
             if len(dots_selected) > 1:
-                (_slope, _) = np.polyfit(dots_selected_y, dots_selected_x, 1)
+                (_slope, _) = np.polyfit(dots_selected_x, dots_selected_y, 1)
             else:
                 _slope = slope
              
             return _slope
         
         x, y = self.get_x_y()
-        self.hor_slope = calc_slopes(-y, -x, init_hor_slope, hor_dist_error) 
-        
-        x, y = self.get_x_y(inv=True)
-        self.ver_slope = calc_slopes(y, x, init_ver_slope, ver_dist_error, ver=True)
+        self.hor_slope = calc_slopes(-x, -y, init_hor_slope, hor_dist_error)
+        self.ver_slope = calc_slopes(x, y, init_ver_slope, ver_dist_error)
         
         return self.hor_slope, self.ver_slope
     
     
     def check_dot_on_line(self, dot1, dot2, ratio, num_dots_miss, ver):
         if ver:
-            slope = self.ver_slope 
+            slope = self.ver_slope
         else:
             slope = self.hor_slope
         check = False
@@ -114,8 +109,10 @@ class Frame:
         
     def group_lines(self, ratio=0.2, num_dots_miss=6, accepted_ratio=0.3):
         def get_lines(x, y, slope, ver=False):
-            list_dots_left = np.vstack((x, y)).T
-            list_dots_left = list_dots_left[y.argsort()]
+            list_dots_left = np.vstack((y, x)).T
+            if ver:
+                list_dots_left = np.fliplr(list_dots_left)
+            list_dots_left = list_dots_left[list_dots_left[:, 1].argsort()]
             num_dots_left = len(list_dots_left)
             list_lines = []
             while num_dots_left > 1:
@@ -137,26 +134,28 @@ class Frame:
                 num_dots_left = len(list_dots_left)
                 if len(dots_selected) > 1:
                     if ver:
-                        dots_selected = np.fliplr(dots_selected)
                         list_lines.append(dots_selected)
                     else:
+                        dots_selected = np.fliplr(dots_selected)
                         list_lines.append(dots_selected)
             list_len = [len(i) for i in list_lines]
             len_accepted = np.int16(accepted_ratio * np.max(list_len))
-            lines_selected = [line for line in list_lines if len(line) > len_accepted] 
+            lines_selected = [line for line in list_lines if len(line) > len_accepted]
             if ver:
-                lines_selected = sorted(lines_selected, key=lambda list_: np.mean(list_[:, 1]))
-            else: 
                 lines_selected = sorted(lines_selected, key=lambda list_: np.mean(list_[:, 0]))
+            else:
+                lines_selected = sorted(lines_selected, key=lambda list_: np.mean(list_[:, 1]))
             
             return lines_selected
         
         x, y = self.get_x_y()
         hor_lines = get_lines(x, y, self.hor_slope)
+        #print(len(hor_lines))
         self.hor_lines = [list(map(tuple, line)) for line in hor_lines]
         
-        x, y = self.get_x_y(inv=True)
+        x, y = self.get_x_y()
         ver_lines = get_lines(x, y, self.ver_slope, ver=True)
+        #print(len(ver_lines))
         self.ver_lines = [list(map(tuple, line)) for line in ver_lines]
         
         return self.hor_lines, self.ver_lines
@@ -172,38 +171,66 @@ class Frame:
         # Register all indices to the center dot
         center_dot_pt = (self.center_dot.x, self.center_dot.y)
         try:
-            common_pts.index(center_dot_pt)   
+            common_pts.index(center_dot_pt)
             center_dot_hi = np.asarray([i_line for i_line, line in enumerate(self.hor_lines) if center_dot_pt in line])
             center_dot_vi = np.asarray([i_line for i_line, line in enumerate(self.ver_lines) if center_dot_pt in line])
         except ValueError:
-            print('Center Dot was not indexed. Will use the closest dot instead.')
+            print('Warning: Center Dot was not indexed. Will use the closest dot instead.')
             dist_2 = np.sum((np.asarray(common_pts) - np.asarray(center_dot_pt)) ** 2, axis=1)
             pseudo_center_pt = common_pts[np.argmin(dist_2)]
             center_dot_hi = np.asarray([i_line for i_line, line in enumerate(self.hor_lines) if pseudo_center_pt in line])
             center_dot_vi = np.asarray([i_line for i_line, line in enumerate(self.ver_lines) if pseudo_center_pt in line])
+            return [],[]
         
         for pt in common_pts:
             hi = np.asarray([i_line for i_line, line in enumerate(self.hor_lines) if pt in line])
             vi = np.asarray([i_line for i_line, line in enumerate(self.ver_lines) if pt in line])
             self.dotsxy_indexed[pt] = list(zip(vi - center_dot_vi, hi - center_dot_hi))
+        
+        return vi - center_dot_vi , hi - center_dot_hi
             
+    def generate_map_xy(self):
+        # from indexed dots to generate xy coordinate map
+        cnt =0
+        for coord in self.dotsxy_indexed:
+            ind = self.dotsxy_indexed[coord][0]
+
+            if np.abs(ind[0]) <= self.xi_range:
+                if np.abs(ind[1]) <= self.yi_range:
+                    self.map_xy[ind[0]+ self.xi_range,ind[1]+self.yi_range,:] = coord #offset center
+                    cnt+=1
+        print('Map generation completed with ' , str(cnt), ' indexed dots' )
+
+    def generate_map_dxdy(self,spacing:int):
+        # from map_xy generate derivative map, spacing as int
+        pos = int(np.round(spacing/2))
+        neg = pos - spacing
+        
+        map_xy_copy = np.copy(self.map_xy)
+        mapx = map_xy_copy[:,:,0]
+        mapdx = mn.shift_fillnan(mapx,-pos,0) - mn.shift_fillnan(mapx,-neg,0)
+        mapy = map_xy_copy[:,:,1]
+        mapdy = mn.shift_fillnan(mapy,-pos,1) - mn.shift_fillnan(mapy,-neg,1)
+        
+        self.map_dxdy[:,:,0]=mapdx
+        self.map_dxdy[:,:,1]=mapdy
+        
             
-    def plot_lines_dots(self, width, height, filepath):
-        fig = plt.figure(frameon=False)
-        fig.set_size_inches(width / 100, height / 100)
-        for line in self.hor_lines:
-            line = np.asarray(line)
-            plt.plot(line[:, 0], height - line[:, 1], '-o', color='blue')
-        for line in self.ver_lines:
-            line = np.asarray(line)
-            plt.plot(line[:, 0], height - line[:, 1], '-o', color='green')
-        #plt.scatter(self.center_dot.x, self.center_dot.y)  
-        plt.savefig(filepath, dpi=100)
-        #plt.show()
+    def draw_lines_on_image(self, image, width, height, filename):
+       image_cpy = image.copy()
+       for line in self.hor_lines:
+           line_int = [(int(pt[0]), int(pt[1])) for pt in line]
+           for pt1, pt2 in zip(line_int, line_int[1:]):
+               cv2.line(image_cpy, pt1, pt2, [255, 0, 0], 2)
+       for line in self.ver_lines:
+           line_int = [(int(pt[0]), int(pt[1])) for pt in line]
+           for pt1, pt2 in zip(line_int, line_int[1:]):
+               cv2.line(image_cpy, pt1, pt2, [0, 255, 0], 2)
+       cv2.imwrite(os.path.join(cf.output_path, filename), image_cpy, [cv2.IMWRITE_JPEG_QUALITY, 40])
         
 
                     
-class Dot:            
+class Dot:
     def __init__(self, x, y, size):
         self.x = x
         self.y = y
@@ -211,20 +238,6 @@ class Dot:
             
     def __str__(self):
         return '({0}, {1})'.format(self.x, self.y)
-        
-
-
-dot_params = {"min_dist": 3,
-              "min_threshold":1,
-              "max_threshold": 1000,
-              "threshold_step":2, 
-              "min_area":50, 
-              "max_area": 2000, 
-              "invert" : True, 
-              "subtract_median": False,
-              "filter_byconvexity": True, 
-              "min_convexity": 0.75, 
-              "filter_bycircularity": False}
     
 
 def distance_kps(dot1, dot2):
@@ -283,7 +296,7 @@ def find_center_dot(dots, height, width):
         
 def find_dots(image):
     image = prep_image(image, normalize_and_filter=False, binarize=False)
-    x, y, size = detect_blobs(dot_params, image)
+    x, y, size = detect_blobs(cf.params, image)
     frame = Frame()
     frame.dots = [Dot(x_i, y_i, size_i) for (x_i, y_i, size_i) in list(zip(x, y, size))]
     
@@ -301,7 +314,7 @@ def find_fov(image, height, width):
         M_inner = cv2.moments(contours[inner_c_index])
         M_outer = cv2.moments(contours[outer_c_index])
     except TypeError:
-        return None
+        return Dot(0, 0, 0)
     
     fov_x = int(M_inner['m10'] / M_inner['m00'])
     fov_y = int(M_inner['m01'] / M_inner['m00']) + roi_hei
@@ -320,7 +333,7 @@ def prep_image(image, normalize_and_filter, binarize):
         _, thresh = cv2.threshold(gray, 50, 255, cv2.THRESH_BINARY) # Could add cv2.THRESH_OTSU
         return thresh
     else:
-        return gray   
+        return gray
     
 
 def get_initial_slopes(image, height, width, ratio):
@@ -353,24 +366,11 @@ def get_initial_slopes(image, height, width, ratio):
     return init_hor_slope, init_ver_slope, hor_dist_error, ver_dist_error
 
 
-def draw_dots(image, dots, filepath):
+def draw_dots(image, dots, filename):
     image_cpy = image.copy()
     for dot in dots:
         if len(dots) > 1:
             cv2.circle(image_cpy, (int(dot.x), int(dot.y)), int(dot.size/2), (0, 255, 0), 3) # Green Dots
         else:
-            cv2.circle(image_cpy, (int(dot.x), int(dot.y)), int(dot.size/2), (0, 0, 255), 3) # Red Circle    
-    cv2.imwrite(filepath, image_cpy)
-    
-
-
-    
-    
-
-    
-
-        
-
-
-
-
+            cv2.circle(image_cpy, (int(dot.x), int(dot.y)), int(dot.size/2), (0, 0, 255), 3) # Red Circle
+    cv2.imwrite(os.path.join(cf.output_path, filename), image_cpy, [cv2.IMWRITE_JPEG_QUALITY, 40])
