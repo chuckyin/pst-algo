@@ -50,9 +50,11 @@ class Frame:
        
     def calc_dot_size_dist(self):
         x, y = self.get_x_y()
-        sq_dist = np.gradient(x) ** 2 + np.gradient(y) ** 2
+        dots_array = np.vstack((x, y)).T
+        dist = [np.sort(np.sqrt((dot[0] - dots_array[:, 0]) ** 2 + (dot[1] - dots_array[:, 1]) ** 2))[1]
+                      for dot in dots_array] 
         
-        self.med_dot_dist = np.median(np.sqrt(sq_dist))
+        self.med_dot_dist = np.median(dist)
         self.med_dot_size = np.median([dot.size for dot in self.dots])
         
         return self.med_dot_size, self.med_dot_dist
@@ -244,30 +246,30 @@ def distance_kps(dot1, dot2):
     return np.sqrt((dot1.x - dot2.x) ** 2 + (dot1.y - dot2.y) ** 2)
 
 
-def detect_blobs(params, image):
-    if params['invert']:
+def detect_blobs(image):
+    if cf.params['invert']:
         image = 255 - image
 
-    if params['subtract_median']:
+    if cf.params['subtract_median']:
         med_blur = cv2.medianBlur(image, 11)
         image = 255 - 255 / (np.max(np.abs(med_blur - image))) * np.abs(med_blur - image)
         
     # Setup SimpleBlobDetector parameters.
     blob_params = cv2.SimpleBlobDetector_Params()
     # Change thresholds
-    blob_params.minThreshold = int(params['min_threshold'])
-    blob_params.maxThreshold = int(params['max_threshold'])
-    blob_params.thresholdStep = int(params['threshold_step'])
-    blob_params.minDistBetweenBlobs = int(params['min_dist'])
+    blob_params.minThreshold = int(cf.params['min_threshold'])
+    blob_params.maxThreshold = int(cf.params['max_threshold'])
+    blob_params.thresholdStep = int(cf.params['threshold_step'])
+    blob_params.minDistBetweenBlobs = int(cf.params['min_dist'])
     # Filter by Area
     blob_params.filterByArea = True
-    blob_params.minArea = int(params['min_area'])
-    blob_params.maxArea = int(params['max_area'])
+    blob_params.minArea = int(cf.params['min_area'])
+    blob_params.maxArea = int(cf.params['max_area'])
     # Filter by Circularity
-    blob_params.filterByCircularity =params['filter_bycircularity']
+    blob_params.filterByCircularity = cf.params['filter_bycircularity']
     blob_params.filterByInertia = False
-    blob_params.filterByConvexity = params['filter_byconvexity']
-    blob_params.minConvexity = params['min_convexity']   # 0.9 filters out most noise at center, lost a few at edge
+    blob_params.filterByConvexity = cf.params['filter_byconvexity']
+    blob_params.minConvexity = cf.params['min_convexity']   # 0.9 filters out most noise at center, lost a few at edge
     
     detector = cv2.SimpleBlobDetector_create(blob_params)
     keypoints = detector.detect(image.astype('uint8'))
@@ -296,7 +298,7 @@ def find_center_dot(dots, height, width):
         
 def find_dots(image):
     image = prep_image(image, normalize_and_filter=False, binarize=False)
-    x, y, size = detect_blobs(cf.params, image)
+    x, y, size = detect_blobs(image)
     frame = Frame()
     frame.dots = [Dot(x_i, y_i, size_i) for (x_i, y_i, size_i) in list(zip(x, y, size))]
     
@@ -330,7 +332,7 @@ def prep_image(image, normalize_and_filter, binarize):
         gray = cv2.normalize(gray, None, 0, 255, cv2.NORM_MINMAX)
         gray = cv2.bilateralFilter(gray, 3, 100, 100)
     if binarize:
-        _, thresh = cv2.threshold(gray, 50, 255, cv2.THRESH_BINARY) # Could add cv2.THRESH_OTSU
+        _, thresh = cv2.threshold(gray, cf.params['bin_th'], 255, cv2.THRESH_BINARY)
         return thresh
     else:
         return gray
