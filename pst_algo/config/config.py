@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Fri Mar  3 14:30:22 2023
 
-@author: melshaer0612
+@author: melshaer0612@meta.com
+
 """
 
 import os
@@ -37,7 +37,7 @@ def config(dataset_folder, params_file):
               'driver' : 'MODEL',
               'dxdy_spacing' : 4, 
               'filter_size' : 3,
-              'bin_th' : 50 }
+              'binary_threshold' : 50 }
         
     if os.path.isfile(os.path.join(current_path, 'config', params_file)):
         with open(os.path.join(current_path, 'config', params_file)) as pf:

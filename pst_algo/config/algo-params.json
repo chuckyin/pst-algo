@@ -1,2 +1,3 @@
 { "min_area" : 30,
-"driver" : "MODEL"}
+"driver" : "MODEL",
+"binary_thresh" : 100}
