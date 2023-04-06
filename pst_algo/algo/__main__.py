@@ -83,14 +83,14 @@ def main(argv):
         fov_dot = blobs.find_fov(image, height, width)
         logger.info('Frame %s : FOV dot was found at %s', frame_num, fov_dot.__str__())
         
-        # # Mask the detected FOV dot
-        # image_gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-        # mask = np.zeros_like(image_gray)
-        # cv2.circle(mask, (int(fov_dot.x), int(fov_dot.y)), int(fov_dot.size), 255, -1)
-        # image_gray = cv2.bitwise_and(image_gray, cv2.bitwise_not(mask))
-        # cv2.imwrite(os.path.join(cf.output_path, frame_num+'_no_fov.jpeg'), image_gray, [cv2.IMWRITE_JPEG_QUALITY, 40])
+        # Mask the detected FOV dot
+        image_gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        mask = np.zeros_like(image_gray)
+        cv2.circle(mask, (int(fov_dot.x), int(fov_dot.y)), int(np.sqrt(fov_dot.size / np.pi)), 255, -1)
+        image_gray = cv2.bitwise_and(image_gray, cv2.bitwise_not(mask))
+        cv2.imwrite(os.path.join(cf.output_path, frame_num+'_no_fov.jpeg'), image_gray, [cv2.IMWRITE_JPEG_QUALITY, 40])
         
-        frame = blobs.find_dots(image)
+        frame = blobs.find_dots(image_gray)
         logger.info('Frame %s : Finding dots is complete, found %d dots', frame_num, len(frame.dots))
         
         frame.center_dot = blobs.find_center_dot(frame.dots, height, width)

@@ -97,7 +97,7 @@ def find_fov(image, height, width):
             M_outer = cv2.moments(contours[cand[0]])
             x = M_inner['m10'] / M_inner['m00']
             y = M_inner['m01'] / M_inner['m00'] + roi_hei
-            size = M_outer['m00'] / M_inner['m00']
+            size = M_outer['m00'] - M_inner['m00']
             cand_fov_dots.append(Dot(x, y, size))
             size_lst.append(size)          
         fov_dot = [dot for dot in cand_fov_dots if dot.size == np.max(size_lst)][0]
@@ -159,7 +159,7 @@ def draw_dots(image, dots, filename):
         if len(dots) > 2:
             cv2.circle(image_cpy, (int(dot.x), int(dot.y)), int(dot.size / 2), (0, 255, 0), 3) # Green Dots
         elif len(dots) == 2 and idx == 0:
-            cv2.circle(image_cpy, (int(dot.x), int(dot.y)), int(dot.size / 2), (0, 0, 255), 3) # Red Circle
+            cv2.circle(image_cpy, (int(dot.x), int(dot.y)), int(np.sqrt(dot.size / np.pi)), (0, 0, 255), 3) # Red Circle
         elif len(dots) == 2 and idx == 1:
             cv2.circle(image_cpy, (int(dot.x), int(dot.y)), int(dot.size / 2), (0, 255, 0), 3) # Center Dot
     cv2.imwrite(os.path.join(cf.output_path, filename), image_cpy, [cv2.IMWRITE_JPEG_QUALITY, 40])
