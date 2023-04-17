@@ -13,6 +13,8 @@ import logging.handlers
 import config.config as cf
 
 
+logging.getLogger('matplotlib').setLevel(logging.ERROR)
+
 logger = logging.getLogger(__name__)
 
 def setup_logger(level=logging.DEBUG, filename=None):
@@ -22,7 +24,8 @@ def setup_logger(level=logging.DEBUG, filename=None):
         fmt='%(asctime)s -- %(levelname)s -- %(filename)s:%(lineno)d (%(funcName)s) -- %(message)s')
     stdout_handler = logging.StreamHandler()
     stdout_handler.setFormatter(formatter)
-    root_logger.addHandler(stdout_handler)
+    if not root_logger.hasHandlers():
+        root_logger.addHandler(stdout_handler)
     
     if filename:
         file_handler = logging.FileHandler(os.path.join(cf.output_path, filename))

@@ -1,3 +1,3 @@
 { "min_area" : 30,
 "driver" : "MODEL",
-"binary_thresh" : 100}
+"binary_threshold" : 150}

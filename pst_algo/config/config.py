@@ -11,6 +11,10 @@ import json
 
 current_path = os.getcwd()
 
+def get_version():
+    __version__ = '23.04.17'
+    return __version__
+
 def config(dataset_folder, params_file):
     global params, input_path, output_path
     
@@ -37,7 +41,8 @@ def config(dataset_folder, params_file):
               'driver' : 'MODEL',
               'dxdy_spacing' : 4, 
               'filter_size' : 3,
-              'binary_threshold' : 50 }
+              'binary_threshold' : 100,
+              'num_frames' : 10}
         
     if os.path.isfile(os.path.join(current_path, 'config', params_file)):
         with open(os.path.join(current_path, 'config', params_file)) as pf:

@@ -97,7 +97,8 @@ def find_fov(image, height, width):
             M_outer = cv2.moments(contours[cand[0]])
             x = M_inner['m10'] / M_inner['m00']
             y = M_inner['m01'] / M_inner['m00'] + roi_hei
-            size = M_outer['m00'] - M_inner['m00']
+            #size = M_outer['m00'] - M_inner['m00']
+            size = M_outer['m00']
             cand_fov_dots.append(Dot(x, y, size))
             size_lst.append(size)          
         fov_dot = [dot for dot in cand_fov_dots if dot.size == np.max(size_lst)][0]

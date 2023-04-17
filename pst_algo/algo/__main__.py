@@ -5,6 +5,9 @@
 @author: melshaer0612@meta.com
 
 """
+import time
+
+start_time = time.monotonic()
 
 import os
 import sys
@@ -12,7 +15,6 @@ import getopt
 import glob
 import re
 import cv2
-import time
 import csv
 import numpy as np
 import pandas as pd
@@ -42,8 +44,6 @@ def main(argv):
     print ('Dataset: ', os.path.join(current_path, 'data', dataset_folder))
     print ('Parameters File: ', os.path.join(current_path, 'config', params_file))
     
-    start_time = time.monotonic()
-    
     cf.config(dataset_folder, params_file)
     
     log_file = 'Detection Log_' + time.strftime('%Y%m%d-%H%M%S') + '.log'
@@ -53,10 +53,19 @@ def main(argv):
     
     logger = setup_logger(filename=log_file)
         
-    image_files = glob.glob(cf.input_path + '*.tiff')
-    image_files.sort(key=lambda f:int(re.sub('\D', '', f)))
+    image_files_all = glob.glob(cf.input_path + '*.tiff')
+    image_files_all.sort(key=lambda f:int(re.sub('\D', '', f)))
     
-    image_files =image_files[::int(np.ceil(len(image_files) / 10))] #only take 10 images
+    if cf.params['num_frames'] == 10:
+        frame_num_list = ['15', '60', '70', '75', '80', '85', '90', '95', '105', '150']
+        image_files = [image_file for image_file in image_files_all 
+                       if ((image_file.split(os.path.sep)[-1].split('_'))[-1].split('.tiff'))[0] in frame_num_list]
+    elif cf.params['num_frames'] == 16:
+        frame_num_list = ['15', '30', '45', '60', '65', '70', '75', '80', '85', '90', '95', '100', '105', '120', '135', '150']
+        image_files = [image_file for image_file in image_files_all 
+                       if ((image_file.split(os.path.sep)[-1].split('_'))[-1].split('.tiff'))[0] in frame_num_list]
+    else:
+        image_files = image_files_all[::int(np.ceil(len(image_files_all) / 10))] # only take 10 images
     
     df = pd.DataFrame() # raw data, 1 blob per line
     df_frame = pd.DataFrame() # frame summary data, 1 frame per line
@@ -86,7 +95,7 @@ def main(argv):
         # Mask the detected FOV dot
         image_gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
         mask = np.zeros_like(image_gray)
-        cv2.circle(mask, (int(fov_dot.x), int(fov_dot.y)), int(np.sqrt(fov_dot.size / np.pi)), 255, -1)
+        cv2.circle(mask, (int(fov_dot.x), int(fov_dot.y)), int(np.sqrt(fov_dot.size / np.pi) + 7), 255, -1)
         image_gray = cv2.bitwise_and(image_gray, cv2.bitwise_not(mask))
         cv2.imwrite(os.path.join(cf.output_path, frame_num+'_no_fov.jpeg'), image_gray, [cv2.IMWRITE_JPEG_QUALITY, 40])
         
@@ -151,7 +160,7 @@ def main(argv):
         df_frame = pd.concat([df_frame, mini_df_frame])
         
         num += 1
-        logger.info('Total frames processed is %d / %d', num, len(image_files))
+        logger.info('Total frames processed is %d / %d', num, len(frame_num_list))
     # END frame loop    
     
     middle_frame_index = kpi.find_middle_frame(df_frame, width, height)
@@ -164,8 +173,10 @@ def main(argv):
     df.to_csv(csv_file)
     df_frame.to_csv(csv_file_frame)
     
-    end_time = time.monotonic()
-    print(timedelta(seconds=end_time - start_time))
+    logger.handlers.clear()
+    
+end_time = time.monotonic()
+print(timedelta(seconds=end_time - start_time))
 
     
 

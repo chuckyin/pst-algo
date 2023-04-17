@@ -210,6 +210,7 @@ def eval_KPIs(df_frame, middle_frame_index, frame_nums, maps_xy, maps_dxdy):
     
     summary = df_frame.loc[df_frame['dist_fov_center'] == np.min(df_frame['dist_fov_center'])].to_dict(orient='records')[0]
     (xi_fov, yi_fov) = [summary['fov_dot_x'] - summary['center_dot_x'], summary['fov_dot_y'] - summary['center_dot_y']] / unitspacing_xy
+    summary['version'] = cf.get_version()
     summary['xi_fov'] = xi_fov
     summary['yi_fov'] = yi_fov
     logger.info('Middle frame determined to be #%s', summary['frame_num'])
