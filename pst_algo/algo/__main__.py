@@ -160,7 +160,7 @@ def main(argv):
         df_frame = pd.concat([df_frame, mini_df_frame])
         
         num += 1
-        logger.info('Total frames processed is %d / %d', num, len(frame_num_list))
+        logger.info('Total frames processed is %d / %d', num, len(image_files))
     # END frame loop    
     
     middle_frame_index = kpi.find_middle_frame(df_frame, width, height)
