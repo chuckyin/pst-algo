@@ -91,9 +91,9 @@ def pipeline(df_lst, df_frame_lst, frame_nums, maps_xy, maps_dxdy, output_path, 
     
     # generate maps
     frame.generate_map_xy()
-    maps_xy.append(frame.map_xy)
+    maps_xy[frame_num] = frame.map_xy
     frame.generate_map_dxdy(params['dxdy_spacing'])  #4x spacing
-    maps_dxdy.append(frame.map_dxdy)
+    maps_dxdy[frame_num] = frame.map_dxdy
     
     # Prepare to save results
     x, y, xi, yi, size = [], [], [], [], []
@@ -169,14 +169,14 @@ if __name__ == '__main__':
         image_files = image_files_all[::int(np.ceil(len(image_files_all) / 10))] # only take 10 images
     
     frame_nums = mp.Manager().list()
-    maps_xy = mp.Manager().list()
-    maps_dxdy = mp.Manager().list()
+    maps_xy_dct = mp.Manager().dict()
+    maps_dxdy_dct = mp.Manager().dict()
     df_lst = mp.Manager().list()
     df_frame_lst = mp.Manager().list()
     pool = mp.Pool(processes=mp.cpu_count())
 
     start = time.perf_counter()
-    pipeline_partial = partial(pipeline, df_lst, df_frame_lst, frame_nums, maps_xy, maps_dxdy, cf.output_path, params)
+    pipeline_partial = partial(pipeline, df_lst, df_frame_lst, frame_nums, maps_xy_dct, maps_dxdy_dct, cf.output_path, params)
     pool.map(pipeline_partial, image_files)
     print(f'Blob Detection time: {round(time.perf_counter() - start, 2)}')
     df = pd.concat(df_lst, ignore_index=True)
@@ -185,6 +185,11 @@ if __name__ == '__main__':
 
     df_frame.sort_values(by='frame_num', key=lambda x: x.astype('int'), inplace=True, ignore_index=True)
     df_frame['index'] = np.arange(len(df_frame.index))
+    
+    maps_xy_sorted = sorted(maps_xy_dct.items(), key=lambda x: int(x[0]))
+    maps_xy = [x[1] for x in maps_xy_sorted]
+    maps_dxdy_sorted = sorted(maps_dxdy_dct.items(), key=lambda x: int(x[0]))
+    maps_dxdy = [x[1] for x in maps_dxdy_sorted]
     
     middle_frame_index = kpi.find_middle_frame(df_frame, width=4024, height=3036)
     summary = kpi.eval_KPIs(df_frame, params, middle_frame_index, frame_nums, maps_xy, maps_dxdy)
