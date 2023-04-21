@@ -31,6 +31,7 @@ import cv2
 import numpy as np
 import pandas as pd
 import csv
+import logging
 import multiprocessing as mp
 import algo.blobs as blobs
 import algo.kpi as kpi
@@ -38,12 +39,19 @@ import config.config as cf
 
 from functools import partial
 from datetime import timedelta
-from config.logging import setup_logger
+from logging.handlers import QueueHandler
+from config.logging import setup_logger, logger_process
+
 
 sys.dont_write_bytecode = True # Disables __pycache__
 
 
-def pipeline(df_lst, df_frame_lst, frame_nums, maps_xy, maps_dxdy, output_path, params, image_file):
+def pipeline(queue, df_lst, df_frame_lst, frame_nums, maps_xy, maps_dxdy, output_path, params, image_file):
+    #------Logging------
+    logger = logging.getLogger(__name__)
+    logger.addHandler(QueueHandler(queue))
+    logger.setLevel(logging.DEBUG)
+    
     frame_num = ((image_file.split(os.path.sep)[-1].split('_'))[-1].split('.tiff'))[0]
     frame_nums.append(frame_num)
     
@@ -53,11 +61,11 @@ def pipeline(df_lst, df_frame_lst, frame_nums, maps_xy, maps_dxdy, output_path, 
     elif params['driver'] == 'FATP': # rotate 180 deg as FATP is mounted upside down
         image = np.rot90(image, 2)  
     
-    #logger.info('Frame %s : Processing started', frame_num)
+    logger.info('Frame %s : Processing started', frame_num)
     height, width, _ = image.shape
     
     fov_dot = blobs.find_fov(image, params, height, width)
-    #logger.info('Frame %s : FOV dot was found at %s', frame_num, fov_dot.__str__())
+    logger.info('Frame %s : FOV dot was found at %s', frame_num, fov_dot.__str__())
    
     # Mask the detected FOV dot
     image_gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
@@ -67,27 +75,27 @@ def pipeline(df_lst, df_frame_lst, frame_nums, maps_xy, maps_dxdy, output_path, 
     cv2.imwrite(os.path.join(output_path, frame_num+'_no_fov.jpeg'), image_gray, [cv2.IMWRITE_JPEG_QUALITY, 40]) 
    
     frame = blobs.find_dots(image_gray, params)
-    #logger.info('Frame %s : Finding dots is complete, found %d dots', frame_num, len(frame.dots))
+    logger.info('Frame %s : Finding dots is complete, found %d dots', frame_num, len(frame.dots))
     
     frame.center_dot = blobs.find_center_dot(frame.dots, height, width)
-    #logger.info('Frame %s : Center dot was found at %s', frame_num, frame.center_dot.__str__())
+    logger.info('Frame %s : Center dot was found at %s', frame_num, frame.center_dot.__str__())
     
     blobs.draw_dots(image, [fov_dot, frame.center_dot], os.path.join(output_path, frame_num+'_fov_center_dots.jpeg'))
     blobs.draw_dots(image, frame.dots, os.path.join(output_path, frame_num+'_dots.jpeg')) # For debugging blob detection
     
     med_size, med_dist = frame.calc_dot_size_dist()
-    #logger.info('Dot Size: %0.2f Distance: %0.2f', med_size, med_dist)
+    logger.info('Frame %s Dot Size: %0.2f Distance: %0.2f', frame_num, med_size, med_dist)
     
     #logger.info('Starting slope calculations for frame %s', frame_num)
     proc = blobs.prep_image(image, params, normalize_and_filter=True, binarize=False)
     init_hor_slope, init_ver_slope, hor_dist_error, ver_dist_error = blobs.get_initial_slopes(proc, height, width, ratio=0.3)
     hor_slope, ver_slope = frame.get_slopes(init_hor_slope, init_ver_slope, hor_dist_error, ver_dist_error)
-    #logger.info('HSlope: %0.2f VSlope: %0.2f', hor_slope, ver_slope)
+    logger.info('Frame %s HSlope: %0.2f VSlope: %0.2f', frame_num, hor_slope, ver_slope)
     
     hor_lines, ver_lines = frame.group_lines()
     frame.draw_lines_on_image(image, width, height, filepath=os.path.join(output_path, frame_num+'_grouped.jpeg'))
     frame.find_index()
-    #logger.info('Finished indexing calculations for frame %s', frame_num)
+    logger.info('Finished indexing calculations for frame %s', frame_num)
     
     # generate maps
     frame.generate_map_xy()
@@ -147,7 +155,7 @@ if __name__ == '__main__':
     
     params = cf.config(dataset_folder, params_file)
     
-    log_file = 'Log_' + time.strftime('%Y%m%d-%H%M%S') + '.log'
+    log_file = os.path.join(cf.output_path, 'Log_' + time.strftime('%Y%m%d-%H%M%S') + '.log')
     csv_file = os.path.join(cf.output_path, time.strftime('%Y%m%d-%H%M%S') + 'dots.csv')
     csv_file_frame = os.path.join(cf.output_path, time.strftime('%Y%m%d-%H%M%S') + 'frames.csv')
     csv_file_summary = os.path.join(cf.output_path, time.strftime('%Y%m%d-%H%M%S') + 'summary.csv')
@@ -173,15 +181,23 @@ if __name__ == '__main__':
     maps_dxdy_dct = mp.Manager().dict()
     df_lst = mp.Manager().list()
     df_frame_lst = mp.Manager().list()
+    
+    queue = mp.Manager().Queue()
+    listener = mp.Process(target=logger_process, args=(queue, setup_logger, log_file))
+    listener.start()
+    
     pool = mp.Pool(processes=mp.cpu_count())
 
     start = time.perf_counter()
-    pipeline_partial = partial(pipeline, df_lst, df_frame_lst, frame_nums, maps_xy_dct, maps_dxdy_dct, cf.output_path, params)
+    pipeline_partial = partial(pipeline, queue, df_lst, df_frame_lst, frame_nums, maps_xy_dct, maps_dxdy_dct, cf.output_path, params)
     pool.map(pipeline_partial, image_files)
     print(f'Blob Detection time: {round(time.perf_counter() - start, 2)}')
     df = pd.concat(df_lst, ignore_index=True)
     df_frame = pd.concat(df_frame_lst, ignore_index=True)
     print(frame_nums)
+    
+    queue.put(None)   
+    listener.join()
 
     df_frame.sort_values(by='frame_num', key=lambda x: x.astype('int'), inplace=True, ignore_index=True)
     df_frame['index'] = np.arange(len(df_frame.index))

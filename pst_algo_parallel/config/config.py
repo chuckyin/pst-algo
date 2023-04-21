@@ -13,7 +13,8 @@ import json
 current_path = os.getcwd()
 
 def get_version():
-    __version__ = '23.04.20p'
+    __version__ = '23.04.21p'
+    
     return __version__      
 
 def config(dataset_folder, params_file):
