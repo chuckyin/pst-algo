@@ -84,7 +84,7 @@ def plot_map_global(map_global, fname_str=''):
 
     fig = plt.figure(figsize=(5, 5), dpi=200) 
     ax = fig.add_subplot(111)
-    plt.title('Global PS Map' + fname_str + '[degree]')
+    plt.title('Global PS Map ' + fname_str + ' [degree]')
     plt.xlabel('xi')
     plt.ylabel('yi')
     levels = np.linspace(0, 1.0, 6)

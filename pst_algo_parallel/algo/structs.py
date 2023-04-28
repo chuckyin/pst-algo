@@ -8,9 +8,6 @@
 
 import cv2
 import numpy as np
-#import config.config as cf
-
-#from config.logging import logger
 
 
 class Dot:
@@ -166,7 +163,7 @@ class Frame:
         return self.hor_lines, self.ver_lines
     
     
-    def find_index(self):
+    def find_index(self, logger, frame_num):
         # The indexed dots are those grouped on the horizontal and vertical lines simultanoeusly.
         all_hor_pts = np.concatenate(self.hor_lines, axis=0).tolist() # flatten
         all_ver_pts = np.concatenate(self.ver_lines, axis=0).tolist() # flatten
@@ -180,7 +177,7 @@ class Frame:
             center_dot_hi = np.asarray([i_line for i_line, line in enumerate(self.hor_lines) if center_dot_pt in line])
             center_dot_vi = np.asarray([i_line for i_line, line in enumerate(self.ver_lines) if center_dot_pt in line])
         except ValueError:
-            #logger.warning('Center Dot was not indexed. Will use the closest dot instead.')
+            logger.warning('Frame %s: Center Dot was not indexed. Will use the closest dot instead.', frame_num)
             dist_2 = np.sum((np.asarray(common_pts) - np.asarray(center_dot_pt)) ** 2, axis=1)
             pseudo_center_pt = common_pts[np.argmin(dist_2)]
             center_dot_hi = np.asarray([i_line for i_line, line in enumerate(self.hor_lines) if pseudo_center_pt in line])
@@ -193,7 +190,7 @@ class Frame:
             self.dotsxy_indexed[pt] = list(zip(vi - center_dot_vi, hi - center_dot_hi))
             
             
-    def generate_map_xy(self):
+    def generate_map_xy(self, logger, frame_num):
         # generate xy coordinate map from indexed dots
         cnt = 0
         for coord in self.dotsxy_indexed:
@@ -202,7 +199,7 @@ class Frame:
                 if np.abs(ind[1]) <= self.yi_range:
                     self.map_xy[ind[0] + self.xi_range, ind[1] + self.yi_range, :] = coord # offset center
                     cnt += 1
-        #logger.info('Map generation complete with %d indexed dots', cnt )
+        logger.info('Frame %s: Map generation complete with %d indexed dots', frame_num, cnt)
         
 
     def generate_map_dxdy(self, spacing:int):

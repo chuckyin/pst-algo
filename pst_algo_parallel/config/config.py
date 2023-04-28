@@ -6,9 +6,11 @@ Created on Fri Mar  3 14:30:22 2023
 @author: melshaer0612
 """
 
+import sys
 import os
 import json
 
+sys.dont_write_bytecode = True # Disables __pycache__
 
 current_path = os.getcwd()
 
