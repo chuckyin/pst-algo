@@ -64,7 +64,7 @@ def pipeline(queue, df_lst, df_frame_lst, frame_nums, maps_xy, maps_dxdy, output
     logger.info('Frame %s : Processing started', frame_num)
     height, width, _ = image.shape
     
-    fov_dot = blobs.find_fov(image, logger, frame_num, height, width)
+    fov_dot = blobs.find_fov(image, params, logger, frame_num, height, width)
     logger.info('Frame %s : FOV dot was found at %s', frame_num, fov_dot.__str__())
    
     # Mask the detected FOV dot
@@ -87,7 +87,7 @@ def pipeline(queue, df_lst, df_frame_lst, frame_nums, maps_xy, maps_dxdy, output
     logger.info('Frame %s Dot Size: %0.2f Distance: %0.2f', frame_num, med_size, med_dist)
     
     logger.info('Starting slope calculations for frame %s', frame_num)
-    proc = blobs.prep_image(image, normalize_and_filter=True, binarize=False)
+    proc = blobs.prep_image(image, params, normalize_and_filter=True, binarize=False)
     init_hor_slope, init_ver_slope, hor_dist_error, ver_dist_error = blobs.get_initial_slopes(proc, height, width, ratio=0.3)
     hor_slope, ver_slope = frame.get_slopes(init_hor_slope, init_ver_slope, hor_dist_error, ver_dist_error)
     logger.info('Frame %s HSlope: %0.2f VSlope: %0.2f', frame_num, hor_slope, ver_slope)

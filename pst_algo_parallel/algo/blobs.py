@@ -69,7 +69,7 @@ def find_center_dot(dots, height, width):
     
         
 def find_dots(image, params):
-    image = prep_image(image, normalize_and_filter=True, binarize=False)
+    image = prep_image(image, params, normalize_and_filter=True, binarize=False)
     x, y, size = detect_blobs(image, params)
     frame = Frame()
     frame.dots = [Dot(x_i, y_i, size_i) for (x_i, y_i, size_i) in list(zip(x, y, size))]
@@ -77,10 +77,10 @@ def find_dots(image, params):
     return frame  
   
     
-def find_fov(image, logger, frame_num, height, width):
+def find_fov(image, params, logger, frame_num, height, width):
     roi_hei = np.int16(height / 3)
     roi_image = image[roi_hei:height - roi_hei]
-    image = prep_image(roi_image, normalize_and_filter=True, binarize=True)
+    image = prep_image(roi_image, params, normalize_and_filter=True, binarize=True)
     contours, hierarchy = cv2.findContours(image, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
     
     outer_c = np.where((hierarchy[0,:,2] != -1) & (hierarchy[0,:,3] == -1))[0].tolist()
@@ -106,7 +106,7 @@ def find_fov(image, logger, frame_num, height, width):
     return fov_dot
 
 
-def prep_image(image, normalize_and_filter, binarize):
+def prep_image(image, params, normalize_and_filter, binarize):
     if image.ndim == 3:
         gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     else:
@@ -115,7 +115,7 @@ def prep_image(image, normalize_and_filter, binarize):
         gray = cv2.normalize(gray, None, 0, 255, cv2.NORM_MINMAX)
         gray = cv2.bilateralFilter(gray, 3, 100, 100)
     if binarize:
-        _, thresh = cv2.threshold(gray, 100, 255, cv2.THRESH_BINARY)
+        _, thresh = cv2.threshold(gray, params['binary_threshold'], 255, cv2.THRESH_BINARY)
         return thresh
     else:
         return gray
