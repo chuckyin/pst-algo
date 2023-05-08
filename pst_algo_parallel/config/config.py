@@ -27,7 +27,8 @@ def config(dataset_folder, params_file):
     
     if not os.path.exists(output_path):
         os.makedirs(output_path)
-        
+    
+    # Default parameters
     params = {'min_dist' : 3,
               'min_threshold' : 1,
               'max_threshold' : 1000,
@@ -46,7 +47,10 @@ def config(dataset_folder, params_file):
               'dxdy_spacing' : 4, 
               'filter_size' : 3,
               'binary_threshold' : 100,
-              'num_frames' : 10}
+              'num_frames' : 10,
+              'filter_percent' : 15,
+              'model_center_y_shift' : -1.6,
+              'fatp_center_y_shift' : 0}
         
     if os.path.isfile(os.path.join(current_path, 'config', params_file)):
         with open(os.path.join(current_path, 'config', params_file)) as pf:

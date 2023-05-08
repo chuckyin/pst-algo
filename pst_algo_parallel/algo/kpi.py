@@ -208,7 +208,7 @@ def eval_KPIs(df_frame, params, middle_frame_index, frame_nums, maps_xy, maps_dx
     xx, yy = np.meshgrid(np.linspace(-60, 60, 121), np.linspace(-60, 60, 121))
     map_fov = np.sqrt(xx ** 2 + yy ** 2) + sys.float_info.epsilon # takes care of divide-by-zero warning
     
-    summary = df_frame.loc[df_frame['dist_fov_center'] == np.min(df_frame['dist_fov_center'])].to_dict(orient='records')[0]
+    summary = df_frame.loc[[middle_frame_index]].to_dict(orient='records')[0]
     (xi_fov, yi_fov) = [summary['fov_dot_x'] - summary['center_dot_x'], summary['fov_dot_y'] - summary['center_dot_y']] / unitspacing_xy
     summary['version'] = cf.get_version()
     summary['xi_fov'] = xi_fov
@@ -220,9 +220,22 @@ def eval_KPIs(df_frame, params, middle_frame_index, frame_nums, maps_xy, maps_dx
     try:
         map_dxdy_norm = maps_dxdy[middle_frame_index] / map_dxdy_median # Normalize map_dxdy
         map_dxdy_norm_fov = offset_map_fov(map_dxdy_norm, xi_fov, yi_fov)
+        
+        # Filter resultant map by removing filter_percent
+        axis = ['x', 'y']
+        filtered_map = np.empty(np.shape(map_dxdy_norm_fov))
+        filtered_map.fill(np.nan)
+        for j in range(len(axis)):
+            mapj = map_dxdy_norm_fov[:, :, j]
+            upper = 1 + (params['filter_percent'] / 100)
+            lower = 1 - (params['filter_percent'] / 100)
+            resj = np.where(((mapj > upper) | (mapj < lower)) & (upper > lower), np.nan, mapj)
+            filtered_map[:, :, j] = resj
+            
         summary_local = calc_parametrics_local(map_dxdy_norm_fov, map_fov)
         summary.update(summary_local) 
-        plot_map_norm(map_dxdy_norm_fov)
+        plot_map_norm(filtered_map)
+        #plot_map_norm(map_dxdy_norm_fov)
     except ValueError:
         logger.error('Error calculating and plotting local PS map')
         pass
@@ -230,6 +243,7 @@ def eval_KPIs(df_frame, params, middle_frame_index, frame_nums, maps_xy, maps_dx
     # Global PS
     map_distance = calc_distance(maps_xy[middle_frame_index], maps_xy[middle_frame_index][60, 60, :])
     map_unit = map_distance / map_fov + sys.float_info.epsilon # takes care of divide-by-zero warning
+    df_frame_no_outliers = df_frame[(df_frame['flag_center_dot_outlier'] == 0) & (df_frame['flag_fov_dot_outlier'] == 0) & (df_frame['flag_slope_outlier'] == 0)] # filter out outlier frames
       
     for i in [0, -1]: #first and last frame
         if i == 0:
@@ -237,7 +251,7 @@ def eval_KPIs(df_frame, params, middle_frame_index, frame_nums, maps_xy, maps_dx
         else:
             label = 'Left Gaze'
         try:
-            idx = df_frame.index[i]
+            idx = df_frame_no_outliers.index[i]
             map_delta_global = maps_xy[idx] - maps_xy[middle_frame_index]
             map_distance_global = calc_distance(map_delta_global, map_delta_global[60, 60, :])
             map_global = map_distance_global / map_unit
@@ -296,8 +310,8 @@ def find_middle_frame(df_frame, width, height):
     df_frame['num_total_outlier'] = num_outliers + num_fov_outliers + num_slope_outliers
     
     #find middle frame by min(d_fov_center)
-    df_frame = df_frame[(df_frame['flag_center_dot_outlier'] == 0) & (df_frame['flag_fov_dot_outlier'] == 0) & (df_frame['flag_slope_outlier'] == 0)] # filter out outlier frames
-    min_d_fov_center = np.min(df_frame['dist_fov_center'])
+    df_frame_no_outliers = df_frame[(df_frame['flag_center_dot_outlier'] == 0) & (df_frame['flag_fov_dot_outlier'] == 0) & (df_frame['flag_slope_outlier'] == 0)] # filter out outlier frames
+    min_d_fov_center = np.min(df_frame_no_outliers['dist_fov_center'])
     middle_frame_index = df_frame.loc[df_frame['dist_fov_center'] == min_d_fov_center].index[0]
     
     return middle_frame_index

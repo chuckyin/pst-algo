@@ -163,7 +163,7 @@ class Frame:
         return self.hor_lines, self.ver_lines
     
     
-    def find_index(self, logger, frame_num):
+    def find_index(self, logger, frame_num, center_y_shift=0):
         # The indexed dots are those grouped on the horizontal and vertical lines simultanoeusly.
         all_hor_pts = np.concatenate(self.hor_lines, axis=0).tolist() # flatten
         all_ver_pts = np.concatenate(self.ver_lines, axis=0).tolist() # flatten
@@ -180,9 +180,8 @@ class Frame:
             logger.warning('Frame %s: Center Dot was not indexed. Will use the closest dot instead.', frame_num)
             dist_2 = np.sum((np.asarray(common_pts) - np.asarray(center_dot_pt)) ** 2, axis=1)
             pseudo_center_pt = common_pts[np.argmin(dist_2)]
-            center_dot_hi = np.asarray([i_line for i_line, line in enumerate(self.hor_lines) if pseudo_center_pt in line])
+            center_dot_hi = np.asarray([i_line for i_line, line in enumerate(self.hor_lines) if pseudo_center_pt in line]) + center_y_shift
             center_dot_vi = np.asarray([i_line for i_line, line in enumerate(self.ver_lines) if pseudo_center_pt in line])
-            return [],[]
         
         for pt in common_pts:
             hi = np.asarray([i_line for i_line, line in enumerate(self.hor_lines) if pt in line])

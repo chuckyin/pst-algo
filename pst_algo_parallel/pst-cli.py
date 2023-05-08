@@ -49,7 +49,8 @@ sys.dont_write_bytecode = True # Disables __pycache__
 def pipeline(queue, df_lst, df_frame_lst, frame_nums, maps_xy, maps_dxdy, output_path, params, image_file):
     #------Logging------
     logger = logging.getLogger(__name__)
-    logger.addHandler(QueueHandler(queue))
+    if not logger.hasHandlers():
+        logger.addHandler(QueueHandler(queue))
     logger.setLevel(logging.DEBUG)
     
     frame_num = ((image_file.split(os.path.sep)[-1].split('_'))[-1].split('.tiff'))[0]
@@ -57,8 +58,9 @@ def pipeline(queue, df_lst, df_frame_lst, frame_nums, maps_xy, maps_dxdy, output
     
     image = cv2.imread(image_file)
     if params['driver'] == 'MODEL':
-        pass
+        center_y_shift = params['model_center_y_shift']
     elif params['driver'] == 'FATP': # rotate 180 deg as FATP is mounted upside down
+        center_y_shift = params['fatp_center_y_shift']
         image = np.rot90(image, 2)  
     
     logger.info('Frame %s : Processing started', frame_num)
@@ -94,7 +96,7 @@ def pipeline(queue, df_lst, df_frame_lst, frame_nums, maps_xy, maps_dxdy, output
     
     hor_lines, ver_lines = frame.group_lines()
     frame.draw_lines_on_image(image, width, height, filepath=os.path.join(output_path, frame_num+'_grouped.jpeg'))
-    frame.find_index(logger, frame_num)
+    frame.find_index(logger, frame_num, center_y_shift=center_y_shift)
     logger.info('Finished indexing calculations for frame %s', frame_num)
     
     # generate maps
