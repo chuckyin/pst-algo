@@ -6,8 +6,12 @@
 
 """
 
+import sys
 import cv2
 import numpy as np
+
+
+sys.dont_write_bytecode = True # Disables __pycache__
 
 
 class Dot:
@@ -174,7 +178,7 @@ class Frame:
         center_dot_pt = (self.center_dot.x, self.center_dot.y)
         try:
             common_pts.index(center_dot_pt)
-            center_dot_hi = np.asarray([i_line for i_line, line in enumerate(self.hor_lines) if center_dot_pt in line])
+            center_dot_hi = np.asarray([i_line for i_line, line in enumerate(self.hor_lines) if center_dot_pt in line]) + center_y_shift
             center_dot_vi = np.asarray([i_line for i_line, line in enumerate(self.ver_lines) if center_dot_pt in line])
         except ValueError:
             logger.warning('Frame %s: Center Dot was not indexed. Will use the closest dot instead.', frame_num)
@@ -196,7 +200,7 @@ class Frame:
             ind = self.dotsxy_indexed[coord][0]
             if np.abs(ind[0]) <= self.xi_range:
                 if np.abs(ind[1]) <= self.yi_range:
-                    self.map_xy[ind[0] + self.xi_range, ind[1] + self.yi_range, :] = coord # offset center
+                    self.map_xy[ind[0] + self.xi_range, int(ind[1] + self.yi_range), :] = coord # offset center
                     cnt += 1
         logger.info('Frame %s: Map generation complete with %d indexed dots', frame_num, cnt)
         
