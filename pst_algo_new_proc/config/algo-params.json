@@ -1,0 +1,3 @@
+{ "min_area" : 30,
+"driver" : "MODEL",
+"num_frames" : 16 }
