@@ -178,11 +178,7 @@ if __name__ == '__main__':
                       if ((image_file.split(os.path.sep)[-1].split('_'))[-1].split('.tiff'))[0] in frame_num_list]
     else:
         image_files = image_files_all[::int(np.ceil(len(image_files_all) / 10))] # only take 10 images
-        
-    # Add two reference images
-    overlay_file = os.path.join(cf.input_path, '1000.tiff')
-    no_overlay_file = os.path.join(cf.input_path, '1001.tiff')
-    
+            
     frame_nums = mp.Manager().list()
     maps_xy_dct = mp.Manager().dict()
     maps_dxdy_dct = mp.Manager().dict()
@@ -214,63 +210,76 @@ if __name__ == '__main__':
     maps_dxdy_sorted = sorted(maps_dxdy_dct.items(), key=lambda x: int(x[0]))
     maps_dxdy = [x[1] for x in maps_dxdy_sorted]
     
+    # Add two reference images
+    overlay_file = os.path.join(cf.input_path, '1000.tiff')
+    no_overlay_file = os.path.join(cf.input_path, '1001.tiff')
+    
+    if os.path.isfile(overlay_file) and os.path.isfile(no_overlay_file):
+        new_proc = True
+    else:
+        new_proc = False
+    
     # New Procedure
-    logger = logging.getLogger(__name__)
-    logger.info('Overlay Frame : %s Processing started', params['driver'])
-    
-    # Find FOV dot in overlay_image
-    overlay_image = cv2.imread(overlay_file)
-    if params['driver'] == 'MODEL':
-        pass
-    elif params['driver'] == 'FATP': # rotate 180 deg as FATP is mounted upside down
-        overlay_image = np.rot90(overlay_image, 2)  
-    
-    overlay_height, overlay_width, _ = overlay_image.shape
-    
-    fov_dot_overlay = blobs.find_fov(overlay_image, params, logger, '1000', overlay_height, overlay_width)
-    logger.info('Overlay Frame : FOV dot was found at %s', fov_dot_overlay.__str__())
-    
-    # Find dots in no_overlay_image
-    no_overlay_image = cv2.imread(no_overlay_file)
-    if params['driver'] == 'MODEL':
-        center_y_shift = params['model_center_y_shift']
-    elif params['driver'] == 'FATP': # rotate 180 deg as FATP is mounted upside down
-        center_y_shift = params['fatp_center_y_shift']
-        no_overlay_image = np.rot90(no_overlay_image, 2)  
+    if new_proc:
+        logger = logging.getLogger(__name__)
+        logger.info('Frame %s : %s Processing started', '1000', params['driver'])
         
-    no_overlay_height, no_overlay_width, _ = no_overlay_image.shape
+        # Find FOV dot in overlay_image
+        overlay_image = cv2.imread(overlay_file)
+        if params['driver'] == 'MODEL':
+            pass
+        elif params['driver'] == 'FATP': # rotate 180 deg as FATP is mounted upside down
+            overlay_image = np.rot90(overlay_image, 2)  
         
-    no_overlay_frame = blobs.find_dots(no_overlay_image, params)
-    logger.info('Frame %s : Finding dots is complete, found %d dots', '1001', len(no_overlay_frame.dots))
-    
-    no_overlay_frame.center_dot = blobs.find_center_dot(no_overlay_frame.dots, no_overlay_height, no_overlay_width)
-    logger.info('Frame %s : Center dot was found at %s', '1001', no_overlay_frame.center_dot.__str__())
-    
-    no_overlay_med_size, no_overlay_med_dist = no_overlay_frame.calc_dot_size_dist()
-    logger.info('Frame %s Dot Size: %0.2f Distance: %0.2f', '1001', no_overlay_med_size, no_overlay_med_dist)
-    
-    logger.info('Starting slope calculations for frame %s', '1001')
-    no_overlay_proc = blobs.prep_image(no_overlay_image, params, normalize_and_filter=True, binarize=False)
-    no_overlay_init_hor_slope, no_overlay_init_ver_slope, no_overlay_hor_dist_error, no_overlay_ver_dist_error = blobs.get_initial_slopes(no_overlay_proc, no_overlay_height, no_overlay_width, ratio=0.3)
-    no_overlay_hor_slope, no_overlay_ver_slope = no_overlay_frame.get_slopes(no_overlay_init_hor_slope, no_overlay_init_ver_slope, no_overlay_hor_dist_error, no_overlay_ver_dist_error)
-    logger.info('Frame %s HSlope: %0.2f VSlope: %0.2f', '1001', no_overlay_hor_slope, no_overlay_ver_slope)
-    
-    no_overlay_hor_lines, no_overlay_ver_lines = no_overlay_frame.group_lines()
-    no_overlay_frame.find_index(logger, '1001', center_y_shift=center_y_shift)
-    logger.info('Finished indexing calculations for frame %s', '1001')
-    
-    no_overlay_frame.generate_map_xy(logger, '1001')
-    no_overlay_frame.generate_map_dxdy(params['dxdy_spacing'])  #4x spacing
+        overlay_height, overlay_width, _ = overlay_image.shape
         
-    kpi.find_outliers(df_frame, width=4024, height=3036)
-    summary_df = pd.DataFrame({'frame_num': '1000-1001',
-                                  'total_dots' : len(no_overlay_frame.dots),
-                                  'center_dot_x' : no_overlay_frame.center_dot.x, 'center_dot_y' : no_overlay_frame.center_dot.y,
-                                  'fov_dot_x' : fov_dot_overlay.x, 'fov_dot_y' : fov_dot_overlay.y,
-                                  'median_dot_size' : no_overlay_med_size, 'median_dot_spacing' : no_overlay_med_dist,
-                                  'hor_slope' : no_overlay_hor_slope, 'ver_slope' : no_overlay_ver_slope,
-                                  'dxdy_spacing' : params['dxdy_spacing']}, index=[0])
-    summary = kpi.eval_KPIs(df_frame, params, summary_df, frame_nums, maps_xy, maps_dxdy, no_overlay_frame.map_dxdy)
+        fov_dot_overlay = blobs.find_fov(overlay_image, params, logger, '1000', overlay_height, overlay_width)
+        logger.info('Frame %s : FOV dot was found at %s', '1000', fov_dot_overlay.__str__())
+        
+        # Find dots in no_overlay_image
+        no_overlay_image = cv2.imread(no_overlay_file)
+        if params['driver'] == 'MODEL':
+            center_y_shift = params['model_center_y_shift']
+        elif params['driver'] == 'FATP': # rotate 180 deg as FATP is mounted upside down
+            center_y_shift = params['fatp_center_y_shift']
+            no_overlay_image = np.rot90(no_overlay_image, 2)  
+            
+        no_overlay_height, no_overlay_width, _ = no_overlay_image.shape
+            
+        no_overlay_frame = blobs.find_dots(no_overlay_image, params)
+        logger.info('Frame %s : Finding dots is complete, found %d dots', '1001', len(no_overlay_frame.dots))
+        
+        no_overlay_frame.center_dot = blobs.find_center_dot(no_overlay_frame.dots, no_overlay_height, no_overlay_width)
+        logger.info('Frame %s : Center dot was found at %s', '1001', no_overlay_frame.center_dot.__str__())
+        
+        no_overlay_med_size, no_overlay_med_dist = no_overlay_frame.calc_dot_size_dist()
+        logger.info('Frame %s Dot Size: %0.2f Distance: %0.2f', '1001', no_overlay_med_size, no_overlay_med_dist)
+        
+        logger.info('Starting slope calculations for frame %s', '1001')
+        no_overlay_proc = blobs.prep_image(no_overlay_image, params, normalize_and_filter=True, binarize=False)
+        no_overlay_init_hor_slope, no_overlay_init_ver_slope, no_overlay_hor_dist_error, no_overlay_ver_dist_error = blobs.get_initial_slopes(no_overlay_proc, no_overlay_height, no_overlay_width, ratio=0.3)
+        no_overlay_hor_slope, no_overlay_ver_slope = no_overlay_frame.get_slopes(no_overlay_init_hor_slope, no_overlay_init_ver_slope, no_overlay_hor_dist_error, no_overlay_ver_dist_error)
+        logger.info('Frame %s HSlope: %0.2f VSlope: %0.2f', '1001', no_overlay_hor_slope, no_overlay_ver_slope)
+        
+        no_overlay_hor_lines, no_overlay_ver_lines = no_overlay_frame.group_lines()
+        no_overlay_frame.find_index(logger, '1001', center_y_shift=center_y_shift)
+        logger.info('Finished indexing calculations for frame %s', '1001')
+        
+        no_overlay_frame.generate_map_xy(logger, '1001')
+        no_overlay_frame.generate_map_dxdy(params['dxdy_spacing'])  #4x spacing
+            
+        kpi.find_outliers(df_frame, width=4024, height=3036)
+        summary_df = pd.DataFrame({'frame_num': '1000-1001',
+                                      'total_dots' : len(no_overlay_frame.dots),
+                                      'center_dot_x' : no_overlay_frame.center_dot.x, 'center_dot_y' : no_overlay_frame.center_dot.y,
+                                      'fov_dot_x' : fov_dot_overlay.x, 'fov_dot_y' : fov_dot_overlay.y,
+                                      'median_dot_size' : no_overlay_med_size, 'median_dot_spacing' : no_overlay_med_dist,
+                                      'hor_slope' : no_overlay_hor_slope, 'ver_slope' : no_overlay_ver_slope,
+                                      'dxdy_spacing' : params['dxdy_spacing']}, index=[0])
+        summary = kpi.eval_KPIs(df_frame, params, summary_df, list(frame_nums), maps_xy, maps_dxdy, no_overlay_frame.map_dxdy)
+    else:
+        middle_frame_index = kpi.find_middle_frame(df_frame, width=4024, height=3036)
+        summary = kpi.eval_KPIs(df_frame, params, int(middle_frame_index), list(frame_nums), maps_xy, maps_dxdy)
     
     with open(csv_file_summary, 'w') as f:  # You will need 'wb' mode in Python 2.x
         w = csv.DictWriter(f, summary.keys())

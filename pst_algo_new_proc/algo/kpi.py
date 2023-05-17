@@ -14,6 +14,7 @@ import matplotlib.pyplot as plt
 import config.config as cf
 
 from config.logging import logger
+from multipledispatch import dispatch
 
 
 sys.dont_write_bytecode = True # Disables __pycache__
@@ -188,7 +189,90 @@ def calc_parametrics_global(map_global, map_fov, label, frame_num):
 
     return summary
 
+@dispatch(pd.DataFrame, dict, int, list, list, list)
+def eval_KPIs(df_frame, params, middle_frame_index, frame_nums, maps_xy, maps_dxdy):
+    def calc_distance(map_xy, ref0):
+        #calculate distance map, relative to ref0, ref0 could be map of same shape, or x,y coor 1-dim array
+        xi_full, yi_full, _ = map_xy.shape
 
+        map_distance = np.empty((xi_full, yi_full))
+        map_distance[:,:] = np.nan
+        
+        map_xy_delta = map_xy - ref0
+        
+        for i in range(xi_full):
+            for j in range(yi_full):
+                map_distance[i, j] = np.sqrt((map_xy_delta[i, j, 0] ** 2 + map_xy_delta[i, j, 1] ** 2))
+        
+        return map_distance
+
+    map_dxdy_median = calc_median_map(maps_dxdy, min_num=1)
+    assert(params['dxdy_spacing'] > 0)
+    unitspacing_xy = map_dxdy_median[60, 60] / params['dxdy_spacing']
+    xx, yy = np.meshgrid(np.linspace(-60, 60, 121), np.linspace(-60, 60, 121))
+    map_fov = np.sqrt(xx ** 2 + yy ** 2) + sys.float_info.epsilon # takes care of divide-by-zero warning
+    
+    summary = df_frame.loc[[middle_frame_index]].to_dict(orient='records')[0]
+    (xi_fov, yi_fov) = [summary['fov_dot_x'] - summary['center_dot_x'], summary['fov_dot_y'] - summary['center_dot_y']] / unitspacing_xy
+    summary['version'] = cf.get_version()
+    summary['xi_fov'] = xi_fov
+    summary['yi_fov'] = yi_fov
+    logger.info('Middle frame determined to be #%s', summary['frame_num'])
+    logger.info('FOV dot is indexed at (%0.2f, %0.2f)', xi_fov, yi_fov)
+    
+    # Local PS
+    try:
+        map_dxdy_norm = maps_dxdy[middle_frame_index] / map_dxdy_median # Normalize map_dxdy
+        map_dxdy_norm_fov = offset_map_fov(map_dxdy_norm, xi_fov, yi_fov)
+        
+        # Filter resultant map by removing filter_percent
+        axis = ['x', 'y']
+        filtered_map = np.empty(np.shape(map_dxdy_norm_fov))
+        filtered_map.fill(np.nan)
+        for j in range(len(axis)):
+            mapj = map_dxdy_norm_fov[:, :, j]
+            upper = 1 + (params['filter_percent'] / 100)
+            lower = 1 - (params['filter_percent'] / 100)
+            resj = np.where(((mapj > upper) | (mapj < lower)) & (upper > lower), np.nan, mapj)
+            filtered_map[:, :, j] = resj
+            if j == 0:
+                df = pd.DataFrame(resj)
+                df.to_csv(os.path.join(cf.output_path,'map_norm_dx_filtered.csv'))
+            
+        summary_local = calc_parametrics_local(map_dxdy_norm_fov, map_fov)
+        summary.update(summary_local) 
+        plot_map_norm(filtered_map)
+        #plot_map_norm(map_dxdy_norm_fov)
+    except ValueError:
+        logger.error('Error calculating and plotting local PS map')
+        pass
+    
+    # # Global PS
+    # map_distance = calc_distance(maps_xy[middle_frame_index], maps_xy[middle_frame_index][60, 60, :])
+    # map_unit = map_distance / map_fov + sys.float_info.epsilon # takes care of divide-by-zero warning
+    # df_frame_no_outliers = df_frame[(df_frame['flag_center_dot_outlier'] == 0) & (df_frame['flag_fov_dot_outlier'] == 0) & (df_frame['flag_slope_outlier'] == 0)] # filter out outlier frames
+      
+    # for i in [0, -1]: #first and last frame
+    #     if i == 0:
+    #         label = 'Right Gaze'
+    #     else:
+    #         label = 'Left Gaze'
+    #     try:
+    #         idx = df_frame_no_outliers.index[i]
+    #         map_delta_global = maps_xy[idx] - maps_xy[middle_frame_index]
+    #         map_distance_global = calc_distance(map_delta_global, map_delta_global[60, 60, :])
+    #         map_global = map_distance_global / map_unit
+    #         map_global = offset_map_fov(map_global, xi_fov, yi_fov)
+    #         summary_global = calc_parametrics_global (map_global, map_fov, label, frame_nums)
+    #         summary.update(summary_global)
+    #         plot_map_global(map_global, fname_str=label)
+    #     except ValueError:
+    #         logger.error('Error calculating and plotting global PS map')
+    #         pass
+            
+    return summary
+
+@dispatch(pd.DataFrame, dict, pd.DataFrame, list, list, list, np.ndarray)
 def eval_KPIs(df_frame, params, summary_df, frame_nums, maps_xy, maps_dxdy, middle_dxdy):
     def calc_distance(map_xy, ref0):
         #calculate distance map, relative to ref0, ref0 could be map of same shape, or x,y coor 1-dim array
@@ -270,6 +354,57 @@ def eval_KPIs(df_frame, params, summary_df, frame_nums, maps_xy, maps_dxdy, midd
             
     return summary
            
+
+def find_middle_frame(df_frame, width, height):
+    df_frame.set_index('index', inplace=True)   # use the index column as the new df_frame index 
+    #determine center dot and FOV outliers
+    median_center_x = np.median(df_frame['center_dot_x'])  # median of center dot locations, use this to determine center dot outlier
+    median_center_y = np.median(df_frame['center_dot_y'])
+    if (median_center_x > 2/3 * width) or (median_center_x < 1/3 * width) or (median_center_y > 2/3 * height) or (median_center_y < 1/3 * height): 
+        raise Exception('Error: Center dot outside of ROI (middle 1/3)')
+        logger.exception('Error: Center dot outside of ROI (middle 1/3)')
+    df_frame['dist_center_dot'] = np.nan
+    df_frame['dist_fov_center'] = np.nan
+    df_frame['flag_center_dot_outlier'] = 0
+    df_frame['flag_fov_dot_outlier'] = 0
+    df_frame['flag_slope_outlier'] = 0
+    num_outliers = 0 
+    num_fov_outliers = 0
+    num_slope_outliers = 0
+    for i in range(len(df_frame.index)):
+        # determine if center dot is outlier based on distance to the median location, if > 50px, mark as outlier
+        df_frame.loc[i, 'dist_center_dot'] = np.sqrt((df_frame.loc[i,'center_dot_x'] - median_center_x) ** 2 + (df_frame.loc[i,'center_dot_y'] - median_center_y) ** 2)
+        if df_frame.loc[i,'dist_center_dot'] > 50:
+            df_frame.loc[i,'flag_center_dot_outlier']= 1
+            num_outliers += 1
+            logger.warning('Center dot outlier detected on frame #%s', df_frame.loc[i,'frame_num'])
+
+        # determine if FOV dot is outlier, if d < 25px, mark as outlier, if y distance > 200px, outlier   
+        df_frame.loc[i, 'dist_fov_center'] = np.sqrt((df_frame.loc[i,'fov_dot_x'] - df_frame.loc[i,'center_dot_x']) ** 2 + (df_frame.loc[i,'fov_dot_y'] - df_frame.loc[i,'center_dot_y']) ** 2)        
+        if (df_frame.loc[i,'dist_fov_center'] < 25) or (np.abs(df_frame.loc[i,'fov_dot_y'] - df_frame.loc[i,'center_dot_y'])) > 200:
+            df_frame.loc[i, 'flag_fov_dot_outlier'] = 1
+            num_fov_outliers += 1
+            logger.warning('FOV dot outlier detected on frame #%s', df_frame.loc[i,'frame_num'])
+        
+        # check slope    
+        if (np.abs(df_frame.loc[i,'hor_slope']) > 0.1) or (np.abs(df_frame.loc[i,'ver_slope']) > 0.1):
+            df_frame.loc[i, 'flag_slope_outlier'] = 1
+            num_slope_outliers +=1
+            logger.warning('Slope outlier detected on frame #%s', df_frame.loc[i,'frame_num'])
+
+    df_frame['num_frames'] = len(df_frame.index)
+    df_frame['num_center_dot_outlier'] = num_outliers
+    df_frame['num_fov_dot_outlier'] = num_fov_outliers
+    df_frame['num_slope_outlier'] = num_slope_outliers
+    df_frame['num_total_outlier'] = num_outliers + num_fov_outliers + num_slope_outliers
+    
+    #find middle frame by min(d_fov_center)
+    df_frame_no_outliers = df_frame[(df_frame['flag_center_dot_outlier'] == 0) & (df_frame['flag_fov_dot_outlier'] == 0) & (df_frame['flag_slope_outlier'] == 0)] # filter out outlier frames
+    min_d_fov_center = np.min(df_frame_no_outliers['dist_fov_center'])
+    middle_frame_index = df_frame.loc[df_frame['dist_fov_center'] == min_d_fov_center].index[0]
+    
+    return middle_frame_index
+    
 
 def find_outliers(df_frame, width, height):
     df_frame.set_index('index', inplace=True)   # use the index column as the new df_frame index 
