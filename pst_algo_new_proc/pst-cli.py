@@ -252,6 +252,9 @@ if __name__ == '__main__':
         no_overlay_frame.center_dot = blobs.find_center_dot(no_overlay_frame.dots, no_overlay_height, no_overlay_width)
         logger.info('Frame %s : Center dot was found at %s', '1001', no_overlay_frame.center_dot.__str__())
         
+        blobs.draw_dots(overlay_image, [fov_dot_overlay, no_overlay_frame.center_dot], os.path.join(cf.output_path, '1000-1001_fov_center_dots.jpeg'))
+        blobs.draw_dots(no_overlay_image, no_overlay_frame.dots, os.path.join(cf.output_path, '1001_dots.jpeg')) # For debugging blob detection
+        
         no_overlay_med_size, no_overlay_med_dist = no_overlay_frame.calc_dot_size_dist()
         logger.info('Frame %s Dot Size: %0.2f Distance: %0.2f', '1001', no_overlay_med_size, no_overlay_med_dist)
         
