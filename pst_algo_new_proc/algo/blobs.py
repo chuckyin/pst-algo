@@ -103,7 +103,7 @@ def find_fov(image, params, logger, frame_num, height, width):
             size_lst.append(size)          
         fov_dot = [dot for dot in cand_fov_dots if dot.size == np.max(size_lst)][0]
     else:
-        fov_dot = Dot(0, 0, 0)
+        fov_dot = Dot(width / 2, height / 2, 0)
         logger.error('Frame %s: Error finding FOV dot', frame_num)
         
     return fov_dot

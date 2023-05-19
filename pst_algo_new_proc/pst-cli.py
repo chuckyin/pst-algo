@@ -59,9 +59,8 @@ def pipeline(queue, df_lst, df_frame_lst, frame_nums, maps_xy, maps_dxdy, output
     
     image = cv2.imread(image_file)
     if params['driver'] == 'MODEL':
-        center_y_shift = params['model_center_y_shift']
+        pass
     elif params['driver'] == 'FATP': # rotate 180 deg as FATP is mounted upside down
-        center_y_shift = params['fatp_center_y_shift']
         image = np.rot90(image, 2)  
     
     logger.info('Frame %s : %s Processing started', frame_num, params['driver'])
@@ -83,7 +82,7 @@ def pipeline(queue, df_lst, df_frame_lst, frame_nums, maps_xy, maps_dxdy, output
     frame.center_dot = blobs.find_center_dot(frame.dots, height, width)
     logger.info('Frame %s : Center dot was found at %s', frame_num, frame.center_dot.__str__())
     
-    blobs.draw_dots(image, [fov_dot, frame.center_dot], os.path.join(output_path, frame_num+'_fov_center_dots.jpeg'))
+    blobs.draw_dots(image, [fov_dot, frame.center_dot], os.path.join(output_path, frame_num+'_fov_center_dots.jpeg')) # For debugging center and FOV dot detection
     blobs.draw_dots(image, frame.dots, os.path.join(output_path, frame_num+'_dots.jpeg')) # For debugging blob detection
     
     med_size, med_dist = frame.calc_dot_size_dist()
@@ -97,7 +96,7 @@ def pipeline(queue, df_lst, df_frame_lst, frame_nums, maps_xy, maps_dxdy, output
     
     hor_lines, ver_lines = frame.group_lines()
     frame.draw_lines_on_image(image, width, height, filepath=os.path.join(output_path, frame_num+'_grouped.jpeg'))
-    frame.find_index(logger, frame_num, center_y_shift=center_y_shift)
+    frame.find_index(logger, frame_num)
     logger.info('Finished indexing calculations for frame %s', frame_num)
     
     # generate maps
@@ -130,7 +129,8 @@ def pipeline(queue, df_lst, df_frame_lst, frame_nums, maps_xy, maps_dxdy, output
                                   'fov_dot_x' : fov_dot.x, 'fov_dot_y' : fov_dot.y,
                                   'median_dot_size' : med_size, 'median_dot_spacing' : med_dist,
                                   'hor_slope' : hor_slope, 'ver_slope' : ver_slope,
-                                  'dxdy_spacing' : params['dxdy_spacing']}, index=[0])
+                                  'dxdy_spacing' : params['dxdy_spacing'], 'map_x_shift' : params['map_x_shift'],
+                                  'map_y_shift' : params['map_y_shift']}, index=[0])
     
     mini_df = pd.DataFrame({'frame_num' : frame_num, 'x' : x, 'y' : y, 'size' : size, 'xi' : xi, 'yi' : yi})
     
@@ -159,9 +159,9 @@ if __name__ == '__main__':
     params = cf.config(dataset_folder, params_file)
     
     log_file = os.path.join(cf.output_path, 'Log_' + time.strftime('%Y%m%d-%H%M%S') + '.log')
-    csv_file = os.path.join(cf.output_path, time.strftime('%Y%m%d-%H%M%S') + 'dots.csv')
-    csv_file_frame = os.path.join(cf.output_path, time.strftime('%Y%m%d-%H%M%S') + 'frames.csv')
-    csv_file_summary = os.path.join(cf.output_path, time.strftime('%Y%m%d-%H%M%S') + 'summary.csv')
+    csv_file = os.path.join(cf.output_path, time.strftime('%Y%m%d-%H%M%S') + '_dots.csv')
+    csv_file_frame = os.path.join(cf.output_path, time.strftime('%Y%m%d-%H%M%S') + '_frames.csv')
+    csv_file_summary = os.path.join(cf.output_path, time.strftime('%Y%m%d-%H%M%S') + '_summary.csv')
     
     logger = setup_logger(filename=log_file)
         
@@ -239,9 +239,8 @@ if __name__ == '__main__':
         # Find dots in no_overlay_image
         no_overlay_image = cv2.imread(no_overlay_file)
         if params['driver'] == 'MODEL':
-            center_y_shift = params['model_center_y_shift']
+            pass
         elif params['driver'] == 'FATP': # rotate 180 deg as FATP is mounted upside down
-            center_y_shift = params['fatp_center_y_shift']
             no_overlay_image = np.rot90(no_overlay_image, 2)  
             
         no_overlay_height, no_overlay_width, _ = no_overlay_image.shape
@@ -252,7 +251,7 @@ if __name__ == '__main__':
         no_overlay_frame.center_dot = blobs.find_center_dot(no_overlay_frame.dots, no_overlay_height, no_overlay_width)
         logger.info('Frame %s : Center dot was found at %s', '1001', no_overlay_frame.center_dot.__str__())
         
-        blobs.draw_dots(overlay_image, [fov_dot_overlay, no_overlay_frame.center_dot], os.path.join(cf.output_path, '1000-1001_fov_center_dots.jpeg'))
+        blobs.draw_dots(overlay_image, [fov_dot_overlay, no_overlay_frame.center_dot], os.path.join(cf.output_path, '1000-1001_fov_center_dots.jpeg')) # For debugging center and FOV dot detection
         blobs.draw_dots(no_overlay_image, no_overlay_frame.dots, os.path.join(cf.output_path, '1001_dots.jpeg')) # For debugging blob detection
         
         no_overlay_med_size, no_overlay_med_dist = no_overlay_frame.calc_dot_size_dist()
@@ -265,7 +264,7 @@ if __name__ == '__main__':
         logger.info('Frame %s HSlope: %0.2f VSlope: %0.2f', '1001', no_overlay_hor_slope, no_overlay_ver_slope)
         
         no_overlay_hor_lines, no_overlay_ver_lines = no_overlay_frame.group_lines()
-        no_overlay_frame.find_index(logger, '1001', center_y_shift=center_y_shift)
+        no_overlay_frame.find_index(logger, '1001')
         logger.info('Finished indexing calculations for frame %s', '1001')
         
         no_overlay_frame.generate_map_xy(logger, '1001')
@@ -278,11 +277,12 @@ if __name__ == '__main__':
                                       'fov_dot_x' : fov_dot_overlay.x, 'fov_dot_y' : fov_dot_overlay.y,
                                       'median_dot_size' : no_overlay_med_size, 'median_dot_spacing' : no_overlay_med_dist,
                                       'hor_slope' : no_overlay_hor_slope, 'ver_slope' : no_overlay_ver_slope,
-                                      'dxdy_spacing' : params['dxdy_spacing']}, index=[0])
-        summary = kpi.eval_KPIs(df_frame, params, summary_df, list(frame_nums), maps_xy, maps_dxdy, no_overlay_frame.map_dxdy)
+                                      'dxdy_spacing' : params['dxdy_spacing'], 'map_x_shift' : params['map_x_shift'],
+                                      'map_y_shift' : params['map_y_shift']}, index=[0])
+        summary = kpi.eval_KPIs(df_frame, params, summary_df, maps_xy, maps_dxdy, no_overlay_frame.map_xy, no_overlay_frame.map_dxdy)
     else:
         middle_frame_index = kpi.find_middle_frame(df_frame, width=4024, height=3036)
-        summary = kpi.eval_KPIs(df_frame, params, int(middle_frame_index), list(frame_nums), maps_xy, maps_dxdy)
+        summary = kpi.eval_KPIs(df_frame, params, int(middle_frame_index), maps_xy, maps_dxdy)
     
     with open(csv_file_summary, 'w') as f:  # You will need 'wb' mode in Python 2.x
         w = csv.DictWriter(f, summary.keys())

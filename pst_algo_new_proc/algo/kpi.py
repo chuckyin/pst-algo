@@ -112,7 +112,7 @@ def plot_map_global(map_global, fname_str=''):
     plt.savefig(os.path.join(cf.output_path, 'Global_PS_Map_' + fname_str + '.png'))       
 
     
-def offset_map_fov (map_input, xi_fov, yi_fov):
+def offset_map_fov (map_input, xi_fov, yi_fov, x_shift=0, y_shift=0):
     def shift_fillnan (arr, shift, axis):
         arr = np.roll(arr, shift, axis)
         if axis == 0:
@@ -129,8 +129,8 @@ def offset_map_fov (map_input, xi_fov, yi_fov):
         return arr    
     
     #offset map and create FOV map (center of display)
-    map_output = shift_fillnan(map_input, int(np.round(-xi_fov)), axis=0) #shift map relative to FOV 
-    map_output = shift_fillnan(map_output, int(np.round(-yi_fov)), axis=1)
+    map_output = shift_fillnan(map_input, int(np.round(-xi_fov + x_shift)), axis=0) #shift map relative to FOV 
+    map_output = shift_fillnan(map_output, int(np.round(-yi_fov + y_shift)), axis=1)
     
     return map_output
 
@@ -146,29 +146,79 @@ def calc_parametrics_local(map_local, map_fov):
     #define zones
     for i in range(len(radii)):
         zone = (map_fov > start_r) * (map_fov <= radii[i])
-        start_r = radii[i]        
-        mapp_both_x = []
+        if radii[i] in [35, 45]:
+            mapp_both_x_L = []
+            mapp_both_x_R = []
+        else:
+            mapp_both_x = []
         for j in range(len(axis)):            
             mapp = map_local[:, :, j]
-            summary['local_areatotal_d' + axis[j] + '_' + str(radii[i])] = np.count_nonzero(~np.isnan(mapp[zone]))
-            summary['local_max_d' + axis[j] + '_' + str(radii[i])] = (np.nanmax(mapp[zone]) - 1) * 100
-            summary['local_min_d' + axis[j] + '_' + str(radii[i])] = (np.nanmin(mapp[zone]) - 1) * 100
-            summary['local_pct99_d' + axis[j] + '_' + str(radii[i])] = (np.nanpercentile(mapp[zone], 99) - 1) * 100
-            summary['local_pct1_d' + axis[j] + '_'+ str(radii[i])] = (np.nanpercentile(mapp[zone], 1) - 1) * 100
-            summary['local_rms_d' + axis[j] + '_' + str(radii[i])] = (np.nanstd(mapp[zone])) * 100
-            for k in range(len(th)): 
-                mapp_pos = (mapp >= 1 + th[k] / 100) * zone
-                mapp_neg = (mapp <= 1 - th[k] / 100) * zone
-                mapp_both = ((mapp >= 1 + th[k]/100) + (mapp <= 1 - th[k] / 100)) * zone
-                summary['local_area_d' + axis[j] + '_th'+ str(th[k]) + 'pctpos_' + str(radii[i])] = np.count_nonzero(mapp_pos)
-                summary['local_area_d' + axis[j] + '_th'+ str(th[k]) + 'pctneg_' + str(radii[i])] = np.count_nonzero(mapp_neg)
-                summary['local_area_d' + axis[j] + '_th' + str(th[k]) + 'pct_' + str(radii[i])] = np.count_nonzero(mapp_both)
-                if j == 0: # x maps
-                    mapp_both_x.append(mapp_both)
-                elif j == 1: # y maps
-                    mapp_both_combine = mapp_both + mapp_both_x[k]
-                    summary['local_area_combined_th' + str(th[k]) + 'pct_' + str(radii[i])] = np.count_nonzero(mapp_both_combine)
+            # Split map further to compare Nasal and Temporal Zones
+            if radii[i] in [35, 45]:
+                summary['local_areatotal_d' + axis[j] + '_' + str(radii[i])] = np.count_nonzero(~np.isnan(mapp[zone]))
+                summary['local_max_d' + axis[j] + '_' + str(radii[i])] = (np.nanmax(mapp[zone]) - 1) * 100
+                summary['local_min_d' + axis[j] + '_' + str(radii[i])] = (np.nanmin(mapp[zone]) - 1) * 100
+                summary['local_rms_d' + axis[j] + '_' + str(radii[i])] = (np.nanstd(mapp[zone])) * 100
                 
+                xx_L, yy_L = np.meshgrid(np.linspace(-60, 0, 61), np.linspace(-60, 60, 121))
+                xx_R, yy_R = np.meshgrid(np.linspace(0, 60, 61), np.linspace(-60, 60, 121))
+                map_fov_L = np.sqrt(xx_L ** 2 + yy_L ** 2) + sys.float_info.epsilon # takes care of divide-by-zero warning
+                map_fov_R = np.sqrt(xx_R ** 2 + yy_R ** 2) + sys.float_info.epsilon # takes care of divide-by-zero warning
+                zone_L = np.concatenate(((map_fov_L > start_r) * (map_fov_L <= radii[i]), np.zeros((121, 60), dtype=bool)), axis=1)
+                zone_R = np.concatenate((np.zeros((121, 60), dtype=bool), (map_fov_R > start_r) * (map_fov_R <= radii[i])), axis=1)
+                
+                summary['local_pct99_d' + axis[j] + '_' + str(radii[i]) + '_L'] = (np.nanpercentile(mapp[zone_L], 99) - 1) * 100
+                summary['local_pct1_d' + axis[j] + '_' + str(radii[i]) + '_L'] = (np.nanpercentile(mapp[zone_L], 1) - 1) * 100
+                summary['local_pct99_d' + axis[j] + '_' + str(radii[i]) + '_R'] = (np.nanpercentile(mapp[zone_R], 99) - 1) * 100
+                summary['local_pct1_d' + axis[j] + '_' + str(radii[i]) + '_R'] = (np.nanpercentile(mapp[zone_R], 1) - 1) * 100
+                
+                summary['local_pp_d' + axis[j] + '_' + str(radii[i]) + '_L'] = summary['local_pct99_d' + axis[j]
+                                                        + '_' + str(radii[i]) + '_L'] - summary['local_pct1_d' + axis[j] + '_' + str(radii[i]) + '_L']
+                summary['local_pp_d' + axis[j] + '_' + str(radii[i]) + '_R'] = summary['local_pct99_d' + axis[j]
+                                                        + '_' + str(radii[i]) + '_R'] - summary['local_pct1_d' + axis[j] + '_' + str(radii[i]) + '_R']                
+                for k in range(len(th)): 
+                    mapp_pos_L = (mapp >= 1 + th[k] / 100) * zone_L
+                    mapp_pos_R = (mapp >= 1 + th[k] / 100) * zone_R
+                    mapp_neg_L = (mapp <= 1 - th[k] / 100) * zone_L
+                    mapp_neg_R = (mapp <= 1 - th[k] / 100) * zone_R
+                    mapp_both_L = ((mapp >= 1 + th[k]/100) + (mapp <= 1 - th[k] / 100)) * zone_L
+                    mapp_both_R = ((mapp >= 1 + th[k]/100) + (mapp <= 1 - th[k] / 100)) * zone_R
+                    summary['local_area_d' + axis[j] + '_th' + str(th[k]) + 'pctpos_' + str(radii[i]) + '_L'] = np.count_nonzero(mapp_pos_L)
+                    summary['local_area_d' + axis[j] + '_th' + str(th[k]) + 'pctneg_' + str(radii[i]) + '_L'] = np.count_nonzero(mapp_neg_L)
+                    summary['local_area_d' + axis[j] + '_th'  + str(th[k]) + 'pct_' + str(radii[i]) + '_L'] = np.count_nonzero(mapp_both_L)
+                    summary['local_area_d' + axis[j] + '_th' + str(th[k]) + 'pctpos_' + str(radii[i]) + '_R'] = np.count_nonzero(mapp_pos_R)
+                    summary['local_area_d' + axis[j] + '_th' + str(th[k]) + 'pctneg_' + str(radii[i]) + '_R'] = np.count_nonzero(mapp_neg_R)
+                    summary['local_area_d' + axis[j] + '_th' + str(th[k]) + 'pct_' + str(radii[i]) + '_R'] = np.count_nonzero(mapp_both_R)
+                    if j == 0: # x maps
+                        mapp_both_x_L.append(mapp_both_L)
+                        mapp_both_x_R.append(mapp_both_R)
+                    elif j == 1: # y maps
+                        mapp_both_combine_L = mapp_both_L + mapp_both_x_L[k]
+                        summary['local_area_combined_th' + str(th[k]) + 'pct_' + str(radii[i]) + '_L'] = np.count_nonzero(mapp_both_combine_L)
+                        mapp_both_combine_R = mapp_both_R + mapp_both_x_R[k]
+                        summary['local_area_combined_th' + str(th[k]) + 'pct_' + str(radii[i]) + '_R'] = np.count_nonzero(mapp_both_combine_R)
+            else:
+                summary['local_areatotal_d' + axis[j] + '_' + str(radii[i])] = np.count_nonzero(~np.isnan(mapp[zone]))
+                summary['local_max_d' + axis[j] + '_' + str(radii[i])] = (np.nanmax(mapp[zone]) - 1) * 100
+                summary['local_min_d' + axis[j] + '_' + str(radii[i])] = (np.nanmin(mapp[zone]) - 1) * 100
+                summary['local_pct99_d' + axis[j] + '_' + str(radii[i])] = (np.nanpercentile(mapp[zone], 99) - 1) * 100
+                summary['local_pct1_d' + axis[j] + '_' + str(radii[i])] = (np.nanpercentile(mapp[zone], 1) - 1) * 100
+                summary['local_rms_d' + axis[j] + '_' + str(radii[i])] = (np.nanstd(mapp[zone])) * 100
+                summary['local_pp_d' + axis[j] + '_' + str(radii[i])] = summary['local_pct99_d' + axis[j]
+                                                        + '_' + str(radii[i])] - summary['local_pct1_d' + axis[j] + '_' + str(radii[i])]
+                for k in range(len(th)): 
+                    mapp_pos = (mapp >= 1 + th[k] / 100) * zone
+                    mapp_neg = (mapp <= 1 - th[k] / 100) * zone
+                    mapp_both = ((mapp >= 1 + th[k]/100) + (mapp <= 1 - th[k] / 100)) * zone
+                    summary['local_area_d' + axis[j] + '_th'+ str(th[k]) + 'pctpos_' + str(radii[i])] = np.count_nonzero(mapp_pos)
+                    summary['local_area_d' + axis[j] + '_th'+ str(th[k]) + 'pctneg_' + str(radii[i])] = np.count_nonzero(mapp_neg)
+                    summary['local_area_d' + axis[j] + '_th' + str(th[k]) + 'pct_' + str(radii[i])] = np.count_nonzero(mapp_both)
+                    if j == 0: # x maps
+                        mapp_both_x.append(mapp_both)
+                    elif j == 1: # y maps
+                        mapp_both_combine = mapp_both + mapp_both_x[k]
+                        summary['local_area_combined_th' + str(th[k]) + 'pct_' + str(radii[i])] = np.count_nonzero(mapp_both_combine)
+        start_r = radii[i]        
     return summary
 
 
@@ -189,8 +239,9 @@ def calc_parametrics_global(map_global, map_fov, label, frame_num):
 
     return summary
 
-@dispatch(pd.DataFrame, dict, int, list, list, list)
-def eval_KPIs(df_frame, params, middle_frame_index, frame_nums, maps_xy, maps_dxdy):
+
+@dispatch(pd.DataFrame, dict, int, list, list)
+def eval_KPIs(df_frame, params, middle_frame_index, maps_xy, maps_dxdy):
     def calc_distance(map_xy, ref0):
         #calculate distance map, relative to ref0, ref0 could be map of same shape, or x,y coor 1-dim array
         xi_full, yi_full, _ = map_xy.shape
@@ -218,62 +269,64 @@ def eval_KPIs(df_frame, params, middle_frame_index, frame_nums, maps_xy, maps_dx
     summary['xi_fov'] = xi_fov
     summary['yi_fov'] = yi_fov
     logger.info('Middle frame determined to be #%s', summary['frame_num'])
+    logger.info('Generated Maps are shifted by (%0.2f, %0.2f)', summary['map_x_shift'], summary['map_y_shift'])
     logger.info('FOV dot is indexed at (%0.2f, %0.2f)', xi_fov, yi_fov)
     
     # Local PS
     try:
         map_dxdy_norm = maps_dxdy[middle_frame_index] / map_dxdy_median # Normalize map_dxdy
-        map_dxdy_norm_fov = offset_map_fov(map_dxdy_norm, xi_fov, yi_fov)
-        
-        # Filter resultant map by removing filter_percent
-        axis = ['x', 'y']
-        filtered_map = np.empty(np.shape(map_dxdy_norm_fov))
-        filtered_map.fill(np.nan)
-        for j in range(len(axis)):
-            mapj = map_dxdy_norm_fov[:, :, j]
-            upper = 1 + (params['filter_percent'] / 100)
-            lower = 1 - (params['filter_percent'] / 100)
-            resj = np.where(((mapj > upper) | (mapj < lower)) & (upper > lower), np.nan, mapj)
-            filtered_map[:, :, j] = resj
-            if j == 0:
-                df = pd.DataFrame(resj)
-                df.to_csv(os.path.join(cf.output_path,'map_norm_dx_filtered.csv'))
-            
-        summary_local = calc_parametrics_local(map_dxdy_norm_fov, map_fov)
-        summary.update(summary_local) 
-        plot_map_norm(filtered_map)
-        #plot_map_norm(map_dxdy_norm_fov)
+        map_dxdy_norm_fov = offset_map_fov(map_dxdy_norm, xi_fov, yi_fov, params['map_x_shift'], params['map_y_shift'])
+        if params['filter_percent'] > 0:
+            # Filter resultant map by removing filter_percent
+            axis = ['x', 'y']
+            filtered_map = np.empty(np.shape(map_dxdy_norm_fov))
+            filtered_map.fill(np.nan)
+            for j in range(len(axis)):
+                mapj = map_dxdy_norm_fov[:, :, j]
+                upper = 1 + (params['filter_percent'] / 100)
+                lower = 1 - (params['filter_percent'] / 100)
+                resj = np.where(((mapj > upper) | (mapj < lower)) & (upper > lower), np.nan, mapj)
+                filtered_map[:, :, j] = resj
+                if j == 0:
+                    df = pd.DataFrame(resj)
+                    df.to_csv(os.path.join(cf.output_path,'map_norm_dx_filtered.csv'))
+                
+            summary_local = calc_parametrics_local(map_dxdy_norm_fov, map_fov)
+            summary.update(summary_local) 
+            plot_map_norm(filtered_map)
+        else:
+            plot_map_norm(map_dxdy_norm_fov)
     except ValueError:
         logger.error('Error calculating and plotting local PS map')
         pass
     
-    # # Global PS
-    # map_distance = calc_distance(maps_xy[middle_frame_index], maps_xy[middle_frame_index][60, 60, :])
-    # map_unit = map_distance / map_fov + sys.float_info.epsilon # takes care of divide-by-zero warning
-    # df_frame_no_outliers = df_frame[(df_frame['flag_center_dot_outlier'] == 0) & (df_frame['flag_fov_dot_outlier'] == 0) & (df_frame['flag_slope_outlier'] == 0)] # filter out outlier frames
+    # Global PS
+    map_distance = calc_distance(maps_xy[middle_frame_index], maps_xy[middle_frame_index][60, 60, :])
+    map_unit = map_distance / map_fov + sys.float_info.epsilon # takes care of divide-by-zero warning
+    df_frame_no_outliers = df_frame[(df_frame['flag_center_dot_outlier'] == 0) & (df_frame['flag_fov_dot_outlier'] == 0) & (df_frame['flag_slope_outlier'] == 0)] # filter out outlier frames
       
-    # for i in [0, -1]: #first and last frame
-    #     if i == 0:
-    #         label = 'Right Gaze'
-    #     else:
-    #         label = 'Left Gaze'
-    #     try:
-    #         idx = df_frame_no_outliers.index[i]
-    #         map_delta_global = maps_xy[idx] - maps_xy[middle_frame_index]
-    #         map_distance_global = calc_distance(map_delta_global, map_delta_global[60, 60, :])
-    #         map_global = map_distance_global / map_unit
-    #         map_global = offset_map_fov(map_global, xi_fov, yi_fov)
-    #         summary_global = calc_parametrics_global (map_global, map_fov, label, frame_nums)
-    #         summary.update(summary_global)
-    #         plot_map_global(map_global, fname_str=label)
-    #     except ValueError:
-    #         logger.error('Error calculating and plotting global PS map')
-    #         pass
+    for i in [0, -1]: #first and last frame
+        if i == 0:
+            label = 'Right Gaze'
+        else:
+            label = 'Left Gaze'
+        try:
+            idx = df_frame_no_outliers.index[i]
+            map_delta_global = maps_xy[idx] - maps_xy[middle_frame_index]
+            map_distance_global = calc_distance(map_delta_global, map_delta_global[60, 60, :])
+            map_global = map_distance_global / map_unit
+            map_global = offset_map_fov(map_global, xi_fov, yi_fov, params['map_x_shift'], params['map_y_shift'])
+            summary_global = calc_parametrics_global(map_global, map_fov, label, df_frame_no_outliers.loc[idx, 'frame_num'])
+            summary.update(summary_global)
+            plot_map_global(map_global, fname_str=label)
+        except ValueError:
+            logger.error('Error calculating and plotting global PS map')
+            pass
             
     return summary
 
-@dispatch(pd.DataFrame, dict, pd.DataFrame, list, list, list, np.ndarray)
-def eval_KPIs(df_frame, params, summary_df, frame_nums, maps_xy, maps_dxdy, middle_dxdy):
+@dispatch(pd.DataFrame, dict, pd.DataFrame, list, list, np.ndarray, np.ndarray)
+def eval_KPIs(df_frame, params, summary_df, maps_xy, maps_dxdy, middle_xy, middle_dxdy):
     def calc_distance(map_xy, ref0):
         #calculate distance map, relative to ref0, ref0 could be map of same shape, or x,y coor 1-dim array
         xi_full, yi_full, _ = map_xy.shape
@@ -300,57 +353,59 @@ def eval_KPIs(df_frame, params, summary_df, frame_nums, maps_xy, maps_dxdy, midd
     summary['version'] = cf.get_version()
     summary['xi_fov'] = xi_fov
     summary['yi_fov'] = yi_fov
+    logger.info('Generated Maps are shifted by (%0.2f, %0.2f)', summary['map_x_shift'], summary['map_y_shift'])
     logger.info('FOV dot is indexed at (%0.2f, %0.2f)', xi_fov, yi_fov)
     
     # Local PS
     try:
         map_dxdy_norm = middle_dxdy / map_dxdy_median # Normalize map_dxdy
-        map_dxdy_norm_fov = offset_map_fov(map_dxdy_norm, xi_fov, yi_fov)
-        
-        # Filter resultant map by removing filter_percent
-        axis = ['x', 'y']
-        filtered_map = np.empty(np.shape(map_dxdy_norm_fov))
-        filtered_map.fill(np.nan)
-        for j in range(len(axis)):
-            mapj = map_dxdy_norm_fov[:, :, j]
-            upper = 1 + (params['filter_percent'] / 100)
-            lower = 1 - (params['filter_percent'] / 100)
-            resj = np.where(((mapj > upper) | (mapj < lower)) & (upper > lower), np.nan, mapj)
-            filtered_map[:, :, j] = resj
-            # if j == 0:
-            #     df = pd.DataFrame(resj)
-            #     df.to_csv(os.path.join(cf.output_path,'map_norm_dx_filtered.csv'))
-            
-        summary_local = calc_parametrics_local(map_dxdy_norm_fov, map_fov)
-        summary.update(summary_local) 
-        plot_map_norm(filtered_map)
-        #plot_map_norm(map_dxdy_norm_fov)
+        map_dxdy_norm_fov = offset_map_fov(map_dxdy_norm, xi_fov, yi_fov, params['map_x_shift'], params['map_y_shift'])
+        if params['filter_percent'] > 0:
+            # Filter resultant map by removing filter_percent
+            axis = ['x', 'y']
+            filtered_map = np.empty(np.shape(map_dxdy_norm_fov))
+            filtered_map.fill(np.nan)
+            for j in range(len(axis)):
+                mapj = map_dxdy_norm_fov[:, :, j]
+                upper = 1 + (params['filter_percent'] / 100)
+                lower = 1 - (params['filter_percent'] / 100)
+                resj = np.where(((mapj > upper) | (mapj < lower)) & (upper > lower), np.nan, mapj)
+                filtered_map[:, :, j] = resj
+                # if j == 0:
+                #     df = pd.DataFrame(resj)
+                #     df.to_csv(os.path.join(cf.output_path,'map_norm_dx_filtered.csv'))
+                
+            summary_local = calc_parametrics_local(map_dxdy_norm_fov, map_fov)
+            summary.update(summary_local) 
+            plot_map_norm(filtered_map)
+        else:
+            plot_map_norm(map_dxdy_norm_fov)
     except ValueError:
         logger.error('Error calculating and plotting local PS map')
         pass
     
-    # # Global PS
-    # map_distance = calc_distance(maps_xy[middle_frame_index], maps_xy[middle_frame_index][60, 60, :])
-    # map_unit = map_distance / map_fov + sys.float_info.epsilon # takes care of divide-by-zero warning
-    # df_frame_no_outliers = df_frame[(df_frame['flag_center_dot_outlier'] == 0) & (df_frame['flag_fov_dot_outlier'] == 0) & (df_frame['flag_slope_outlier'] == 0)] # filter out outlier frames
+    # Global PS
+    map_distance = calc_distance(middle_xy, middle_xy[60, 60, :])
+    map_unit = map_distance / map_fov + sys.float_info.epsilon # takes care of divide-by-zero warning
+    df_frame_no_outliers = df_frame[(df_frame['flag_center_dot_outlier'] == 0) & (df_frame['flag_fov_dot_outlier'] == 0) & (df_frame['flag_slope_outlier'] == 0)] # filter out outlier frames
       
-    # for i in [0, -1]: #first and last frame
-    #     if i == 0:
-    #         label = 'Right Gaze'
-    #     else:
-    #         label = 'Left Gaze'
-    #     try:
-    #         idx = df_frame_no_outliers.index[i]
-    #         map_delta_global = maps_xy[idx] - maps_xy[middle_frame_index]
-    #         map_distance_global = calc_distance(map_delta_global, map_delta_global[60, 60, :])
-    #         map_global = map_distance_global / map_unit
-    #         map_global = offset_map_fov(map_global, xi_fov, yi_fov)
-    #         summary_global = calc_parametrics_global (map_global, map_fov, label, frame_nums)
-    #         summary.update(summary_global)
-    #         plot_map_global(map_global, fname_str=label)
-    #     except ValueError:
-    #         logger.error('Error calculating and plotting global PS map')
-    #         pass
+    for i in [0, -1]: #first and last frame
+        if i == 0:
+            label = 'Right Gaze'
+        else:
+            label = 'Left Gaze'
+        try:
+            idx = df_frame_no_outliers.index[i]
+            map_delta_global = maps_xy[idx] - middle_xy
+            map_distance_global = calc_distance(map_delta_global, map_delta_global[60, 60, :])
+            map_global = map_distance_global / map_unit
+            map_global = offset_map_fov(map_global, xi_fov, yi_fov, params['map_x_shift'], params['map_y_shift'])
+            summary_global = calc_parametrics_global(map_global, map_fov, label, df_frame_no_outliers.loc[idx, 'frame_num'])
+            summary.update(summary_global)
+            plot_map_global(map_global, fname_str=label)
+        except ValueError:
+            logger.error('Error calculating and plotting global PS map')
+            pass
             
     return summary
            

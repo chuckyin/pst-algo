@@ -21,7 +21,7 @@ class Dot:
         self.size = size
             
     def __str__(self):
-        return '({0}, {1})'.format(self.x, self.y)
+        return '({0:0.2f}, {1:0.2f})'.format(self.x, self.y)
     
 
 class Frame:
@@ -167,7 +167,7 @@ class Frame:
         return self.hor_lines, self.ver_lines
     
     
-    def find_index(self, logger, frame_num, center_y_shift=0):
+    def find_index(self, logger, frame_num):
         # The indexed dots are those grouped on the horizontal and vertical lines simultanoeusly.
         all_hor_pts = np.concatenate(self.hor_lines, axis=0).tolist() # flatten
         all_ver_pts = np.concatenate(self.ver_lines, axis=0).tolist() # flatten
@@ -178,13 +178,13 @@ class Frame:
         center_dot_pt = (self.center_dot.x, self.center_dot.y)
         try:
             common_pts.index(center_dot_pt)
-            center_dot_hi = np.asarray([i_line for i_line, line in enumerate(self.hor_lines) if center_dot_pt in line]) + center_y_shift
+            center_dot_hi = np.asarray([i_line for i_line, line in enumerate(self.hor_lines) if center_dot_pt in line])
             center_dot_vi = np.asarray([i_line for i_line, line in enumerate(self.ver_lines) if center_dot_pt in line])
         except ValueError:
             logger.warning('Frame %s: Center Dot was not indexed. Will use the closest dot instead.', frame_num)
             dist_2 = np.sum((np.asarray(common_pts) - np.asarray(center_dot_pt)) ** 2, axis=1)
             pseudo_center_pt = common_pts[np.argmin(dist_2)]
-            center_dot_hi = np.asarray([i_line for i_line, line in enumerate(self.hor_lines) if pseudo_center_pt in line]) + center_y_shift
+            center_dot_hi = np.asarray([i_line for i_line, line in enumerate(self.hor_lines) if pseudo_center_pt in line])
             center_dot_vi = np.asarray([i_line for i_line, line in enumerate(self.ver_lines) if pseudo_center_pt in line])
         
         for pt in common_pts:
@@ -200,7 +200,7 @@ class Frame:
             ind = self.dotsxy_indexed[coord][0]
             if np.abs(ind[0]) <= self.xi_range:
                 if np.abs(ind[1]) <= self.yi_range:
-                    self.map_xy[ind[0] + self.xi_range, int(ind[1] + self.yi_range), :] = coord # offset center
+                    self.map_xy[ind[0] + self.xi_range, ind[1] + self.yi_range, :] = coord # offset center
                     cnt += 1
         logger.info('Frame %s: Map generation complete with %d indexed dots', frame_num, cnt)
         

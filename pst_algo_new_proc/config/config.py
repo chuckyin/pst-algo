@@ -17,7 +17,7 @@ current_path = os.getcwd()
 
 
 def get_version():
-    __version__ = '23.05.09p_new_proc'
+    __version__ = '23.05.19p_new_proc'
     
     return __version__      
 
@@ -52,8 +52,8 @@ def config(dataset_folder, params_file):
               'binary_threshold' : 100,
               'num_frames' : 10,
               'filter_percent' : 15,
-              'model_center_y_shift' : -1.6,
-              'fatp_center_y_shift' : 0}
+              'map_y_shift' : 0, # For Stinson
+              'map_x_shift' : 0} # For Stinson
         
     if os.path.isfile(os.path.join(current_path, 'config', params_file)):
         with open(os.path.join(current_path, 'config', params_file)) as pf:
