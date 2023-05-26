@@ -287,14 +287,16 @@ def eval_KPIs(df_frame, params, middle_frame_index, maps_xy, maps_dxdy):
                 lower = 1 - (params['filter_percent'] / 100)
                 resj = np.where(((mapj > upper) | (mapj < lower)) & (upper > lower), np.nan, mapj)
                 filtered_map[:, :, j] = resj
-                if j == 0:
-                    df = pd.DataFrame(resj)
-                    df.to_csv(os.path.join(cf.output_path,'map_norm_dx_filtered.csv'))
+                # if j == 0:
+                #     df = pd.DataFrame(resj)
+                #     df.to_csv(os.path.join(cf.output_path,'map_norm_dx_filtered.csv'))
                 
-            summary_local = calc_parametrics_local(map_dxdy_norm_fov, map_fov)
+            summary_local = calc_parametrics_local(filtered_map, map_fov)
             summary.update(summary_local) 
             plot_map_norm(filtered_map)
         else:
+            summary_local = calc_parametrics_local(map_dxdy_norm_fov, map_fov)
+            summary.update(summary_local) 
             plot_map_norm(map_dxdy_norm_fov)
     except ValueError:
         logger.error('Error calculating and plotting local PS map')
@@ -375,10 +377,12 @@ def eval_KPIs(df_frame, params, summary_df, maps_xy, maps_dxdy, middle_xy, middl
                 #     df = pd.DataFrame(resj)
                 #     df.to_csv(os.path.join(cf.output_path,'map_norm_dx_filtered.csv'))
                 
-            summary_local = calc_parametrics_local(map_dxdy_norm_fov, map_fov)
+            summary_local = calc_parametrics_local(filtered_map, map_fov)
             summary.update(summary_local) 
             plot_map_norm(filtered_map)
         else:
+            summary_local = calc_parametrics_local(map_dxdy_norm_fov, map_fov)
+            summary.update(summary_local) 
             plot_map_norm(map_dxdy_norm_fov)
     except ValueError:
         logger.error('Error calculating and plotting local PS map')
