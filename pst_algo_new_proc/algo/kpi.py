@@ -14,6 +14,7 @@ import matplotlib.pyplot as plt
 import config.config as cf
 
 from config.logging import logger
+from numpy.lib.stride_tricks import sliding_window_view
 from multipledispatch import dispatch
 
 
@@ -42,31 +43,64 @@ def calc_median_map(maps, min_num=3):
     return output
 
 
-def plot_map_norm(map_norm, fname_str=''):
-    xi_full, yi_full, dim = map_norm.shape
-    xi_range = int((xi_full - 1) / 2)
-    yi_range = int((yi_full - 1) / 2)
-    X, Y = np.meshgrid(np.linspace(-xi_range,xi_range,xi_full),np.linspace(-yi_range,yi_range,yi_full))
-    
-    for i in [0, 1]: #x,y
-        if i == 0:
-            axis = 'X'
-        else:
-            axis = 'Y'
+def plot_map_norm(map_norm, levels=None, fname_str=''):
+    if map_norm.ndim > 2: # N 2D xy maps
+        xi_full, yi_full, _ = map_norm.shape
+        xi_range = int((xi_full - 1) / 2)
+        yi_range = int((yi_full - 1) / 2)
+        X, Y = np.meshgrid(np.linspace(-xi_range, xi_range, xi_full),np.linspace(-yi_range, yi_range, yi_full))
+        
+        for i in [0, 1]: # x, y
+            if i == 0:
+                axis = 'X'
+            else:
+                axis = 'Y'
+            fig = plt.figure(figsize=(5, 5), dpi=200) 
+            ax = fig.add_subplot(111)
+            plt.title(fname_str + axis)
+            #plt.title('Normalized ' + axis + '-Spacing Change')
+            plt.xlabel('xi')
+            plt.ylabel('yi')
+            levels = np.linspace(0.95, 1.05, 11)
+            plt.contourf(X, Y, map_norm[:, :, i].T, levels=levels, cmap='seismic', extend='both')  #cmap ='coolwarm','bwr'
+            ax.set_aspect('equal')
+        
+            plt.xlim(-xi_range, xi_range)
+            plt.ylim(yi_range, -yi_range)
+            
+            radii = [25, 45]
+        
+            for radius in radii:    
+                theta = np.linspace(0, 2 * np.pi, 100)
+                a = radius * np.cos(theta)
+                b = radius * np.sin(theta)
+                plt.plot(a, b, color='green', linestyle=(0, (5, 5)), linewidth=0.4)  #'loosely dotted'
+                
+            plt.grid(color='grey', linestyle='dashed', linewidth=0.2)
+            plt.rcParams['font.size'] = '5'
+            plt.colorbar()
+            plt.savefig(os.path.join(cf.output_path, fname_str + axis +'.png'))
+        
+    else:
+        xi_full, yi_full = map_norm.shape
+        xi_range = int((xi_full - 1) / 2)
+        yi_range = int((yi_full - 1) / 2)
+        X, Y = np.meshgrid(np.linspace(-xi_range, xi_range, xi_full),np.linspace(-yi_range, yi_range, yi_full))
+        
         fig = plt.figure(figsize=(5, 5), dpi=200) 
         ax = fig.add_subplot(111)
-        plt.title('Normalized ' + axis + '-Spacing Change')
+        plt.title(fname_str)
         plt.xlabel('xi')
         plt.ylabel('yi')
-        levels = np.linspace(0.95, 1.05, 11)
-        plt.contourf(X, Y, map_norm[:,:,i].T, levels=levels, cmap='seismic', extend='both')  #cmap ='coolwarm','bwr'
+        #levels = np.linspace(0, 16, 5)
+        plt.contourf(X, Y, map_norm, levels=levels, cmap='seismic', extend='both')  #cmap ='coolwarm','bwr'
         ax.set_aspect('equal')
-    
+
         plt.xlim(-xi_range, xi_range)
         plt.ylim(yi_range, -yi_range)
         
         radii = [25, 45]
-    
+
         for radius in radii:    
             theta = np.linspace(0, 2 * np.pi, 100)
             a = radius * np.cos(theta)
@@ -76,7 +110,7 @@ def plot_map_norm(map_norm, fname_str=''):
         plt.grid(color='grey', linestyle='dashed', linewidth=0.2)
         plt.rcParams['font.size'] = '5'
         plt.colorbar()
-        plt.savefig(os.path.join(cf.output_path, 'Normalized_Map_' + fname_str + axis +'.png'))
+        plt.savefig(os.path.join(cf.output_path, fname_str + '.png'))
 
     
 def plot_map_global(map_global, fname_str=''):   
@@ -135,13 +169,14 @@ def offset_map_fov (map_input, xi_fov, yi_fov, x_shift=0, y_shift=0):
     return map_output
 
     
-def calc_parametrics_local(map_local, map_fov):
+def calc_parametrics_local(map_local, map_fov, params):
     #calculate the parametrics based on the map
     summary = {}
     start_r = -1
     radii = [25, 35, 45, 60]  #need to start from small to large
-    axis = ['x', 'y']
+    axis = ['X', 'Y']
     th = [0.5, 1, 5]  #in percent
+    k = params['kernel_pp_size'] # window size for peak-to-peak calculations
     
     #define zones
     for i in range(len(radii)):
@@ -152,7 +187,7 @@ def calc_parametrics_local(map_local, map_fov):
         else:
             mapp_both_x = []
         for j in range(len(axis)):            
-            mapp = map_local[:, :, j]
+            mapp = map_local[:, :, j].T
             # Split map further to compare Nasal and Temporal Zones
             if radii[i] in [35, 45]:
                 summary['local_areatotal_d' + axis[j] + '_' + str(radii[i])] = np.count_nonzero(~np.isnan(mapp[zone]))
@@ -176,13 +211,28 @@ def calc_parametrics_local(map_local, map_fov):
                                                         + '_' + str(radii[i]) + '_L'] - summary['local_pct1_d' + axis[j] + '_' + str(radii[i]) + '_L']
                 summary['local_pp_d' + axis[j] + '_' + str(radii[i]) + '_R'] = summary['local_pct99_d' + axis[j]
                                                         + '_' + str(radii[i]) + '_R'] - summary['local_pct1_d' + axis[j] + '_' + str(radii[i]) + '_R']                
+                # Peak-to-Peak Maps
+                zone_mapp_L = np.where(zone_L, mapp, np.nan)
+                max_mapp_L = np.max(sliding_window_view(zone_mapp_L, window_shape=(k, k)), axis=(2, 3))
+                min_mapp_L = np.min(sliding_window_view(zone_mapp_L, window_shape=(k, k)), axis=(2, 3))
+                pp_mapp_L = max_mapp_L - min_mapp_L
+                pp_L = np.pad(pp_mapp_L, pad_width=int(k/2), mode='constant', constant_values=np.nan)
+                plot_map_norm(pp_L, fname_str='Peak-to-Peak_' + axis[j] + '_map_' + str(radii[i]) + '_degree_zone_L')
+                
+                zone_mapp_R = np.where(zone_R, mapp, np.nan)
+                max_mapp_R = np.max(sliding_window_view(zone_mapp_R, window_shape=(k, k)), axis=(2, 3))
+                min_mapp_R = np.min(sliding_window_view(zone_mapp_R, window_shape=(k, k)), axis=(2, 3))
+                pp_mapp_R = max_mapp_R - min_mapp_R
+                pp_R = np.pad(pp_mapp_R, pad_width=int(k/2), mode='constant', constant_values=np.nan)
+                plot_map_norm(pp_R, fname_str='Peak-to-Peak_' + axis[j] + '_map_' + str(radii[i]) + '_degree_zone_R')
+                
                 for k in range(len(th)): 
                     mapp_pos_L = (mapp >= 1 + th[k] / 100) * zone_L
                     mapp_pos_R = (mapp >= 1 + th[k] / 100) * zone_R
                     mapp_neg_L = (mapp <= 1 - th[k] / 100) * zone_L
                     mapp_neg_R = (mapp <= 1 - th[k] / 100) * zone_R
-                    mapp_both_L = ((mapp >= 1 + th[k]/100) + (mapp <= 1 - th[k] / 100)) * zone_L
-                    mapp_both_R = ((mapp >= 1 + th[k]/100) + (mapp <= 1 - th[k] / 100)) * zone_R
+                    mapp_both_L = ((mapp >= 1 + th[k] / 100) + (mapp <= 1 - th[k] / 100)) * zone_L
+                    mapp_both_R = ((mapp >= 1 + th[k] / 100) + (mapp <= 1 - th[k] / 100)) * zone_R
                     summary['local_area_d' + axis[j] + '_th' + str(th[k]) + 'pctpos_' + str(radii[i]) + '_L'] = np.count_nonzero(mapp_pos_L)
                     summary['local_area_d' + axis[j] + '_th' + str(th[k]) + 'pctneg_' + str(radii[i]) + '_L'] = np.count_nonzero(mapp_neg_L)
                     summary['local_area_d' + axis[j] + '_th'  + str(th[k]) + 'pct_' + str(radii[i]) + '_L'] = np.count_nonzero(mapp_both_L)
@@ -197,6 +247,7 @@ def calc_parametrics_local(map_local, map_fov):
                         summary['local_area_combined_th' + str(th[k]) + 'pct_' + str(radii[i]) + '_L'] = np.count_nonzero(mapp_both_combine_L)
                         mapp_both_combine_R = mapp_both_R + mapp_both_x_R[k]
                         summary['local_area_combined_th' + str(th[k]) + 'pct_' + str(radii[i]) + '_R'] = np.count_nonzero(mapp_both_combine_R)
+            
             else:
                 summary['local_areatotal_d' + axis[j] + '_' + str(radii[i])] = np.count_nonzero(~np.isnan(mapp[zone]))
                 summary['local_max_d' + axis[j] + '_' + str(radii[i])] = (np.nanmax(mapp[zone]) - 1) * 100
@@ -206,10 +257,19 @@ def calc_parametrics_local(map_local, map_fov):
                 summary['local_rms_d' + axis[j] + '_' + str(radii[i])] = (np.nanstd(mapp[zone])) * 100
                 summary['local_pp_d' + axis[j] + '_' + str(radii[i])] = summary['local_pct99_d' + axis[j]
                                                         + '_' + str(radii[i])] - summary['local_pct1_d' + axis[j] + '_' + str(radii[i])]
+                # Peak-to-Peak Maps
+                if radii[i] == 25:
+                    zone_mapp = np.where(zone, mapp, np.nan)
+                    max_mapp = np.max(sliding_window_view(zone_mapp, window_shape=(k, k)), axis=(2, 3))
+                    min_mapp = np.min(sliding_window_view(zone_mapp, window_shape=(k, k)), axis=(2, 3))
+                    pp_mapp = max_mapp - min_mapp
+                    pp = np.pad(pp_mapp, pad_width=int(k/2), mode='constant', constant_values=np.nan)
+                    plot_map_norm(pp, fname_str='Peak-to-Peak_' + axis[j] + '_map_' + str(radii[i]) + '_degree_zone')
+                
                 for k in range(len(th)): 
                     mapp_pos = (mapp >= 1 + th[k] / 100) * zone
                     mapp_neg = (mapp <= 1 - th[k] / 100) * zone
-                    mapp_both = ((mapp >= 1 + th[k]/100) + (mapp <= 1 - th[k] / 100)) * zone
+                    mapp_both = ((mapp >= 1 + th[k] / 100) + (mapp <= 1 - th[k] / 100)) * zone
                     summary['local_area_d' + axis[j] + '_th'+ str(th[k]) + 'pctpos_' + str(radii[i])] = np.count_nonzero(mapp_pos)
                     summary['local_area_d' + axis[j] + '_th'+ str(th[k]) + 'pctneg_' + str(radii[i])] = np.count_nonzero(mapp_neg)
                     summary['local_area_d' + axis[j] + '_th' + str(th[k]) + 'pct_' + str(radii[i])] = np.count_nonzero(mapp_both)
@@ -278,7 +338,7 @@ def eval_KPIs(df_frame, params, middle_frame_index, maps_xy, maps_dxdy):
         map_dxdy_norm_fov = offset_map_fov(map_dxdy_norm, xi_fov, yi_fov, params['map_x_shift'], params['map_y_shift'])
         if params['filter_percent'] > 0:
             # Filter resultant map by removing filter_percent
-            axis = ['x', 'y']
+            axis = ['X', 'Y']
             filtered_map = np.empty(np.shape(map_dxdy_norm_fov))
             filtered_map.fill(np.nan)
             for j in range(len(axis)):
@@ -287,21 +347,63 @@ def eval_KPIs(df_frame, params, middle_frame_index, maps_xy, maps_dxdy):
                 lower = 1 - (params['filter_percent'] / 100)
                 resj = np.where(((mapj > upper) | (mapj < lower)) & (upper > lower), np.nan, mapj)
                 filtered_map[:, :, j] = resj
-                # if j == 0:
-                #     df = pd.DataFrame(resj)
-                #     df.to_csv(os.path.join(cf.output_path,'map_norm_dx_filtered.csv'))
+                if j == 0:
+                    df = pd.DataFrame(resj)
+                    df.to_csv(os.path.join(cf.output_path,'map_norm_dx_filtered.csv'))
                 
-            summary_local = calc_parametrics_local(filtered_map, map_fov)
+            summary_local = calc_parametrics_local(filtered_map, map_fov, params)
             summary.update(summary_local) 
-            plot_map_norm(filtered_map)
+            plot_map_norm(filtered_map, fname_str='Normalized_Map_')
         else:
-            summary_local = calc_parametrics_local(map_dxdy_norm_fov, map_fov)
-            summary.update(summary_local) 
-            plot_map_norm(map_dxdy_norm_fov)
+            summary_local = calc_parametrics_local(map_dxdy_norm_fov, map_fov, params)
+            summary.update(summary_local)
+            plot_map_norm(map_dxdy_norm_fov, fname_str='Normalized_Map_')
     except ValueError:
         logger.error('Error calculating and plotting local PS map')
         pass
     
+    # # Local Central PS 
+    # # For radial zones < 10, 15, 20 and 25, for each frame, calculate the thresholded th% map,
+    # # then generate a final count map based on a pre-defined voting threshold out of num_frames
+    # try:
+    #     start_r = -1
+    #     radii = [10, 15, 20, 25]  #need to start from small to large
+    #     #axis = ['x', 'y']
+    #     axis = ['x']
+    #     th = 0.5  #in percent
+    #     map_frame = np.zeros((len(maps_dxdy), len(radii), maps_dxdy[0].shape[0], maps_dxdy[0].shape[1]))
+    #     for frame in range(len(maps_dxdy)):
+    #         map_dxdy_norm_frame = maps_dxdy[frame] / map_dxdy_median
+    #         map_dxdy_norm_fov_frame = offset_map_fov(map_dxdy_norm_frame, xi_fov, yi_fov, params['map_x_shift'], params['map_y_shift'])
+            
+    #         for i in range(len(radii)):
+    #             zone = (map_fov > start_r) * (map_fov <= radii[i])
+    #             mapp_both_frame_x = []
+    #             for j in range(len(axis)):            
+    #                 mapp = map_dxdy_norm_fov_frame[:, :, j]
+    #                 # mapp_pos = (mapp >= 1 + th / 100) * zone
+    #                 # mapp_neg = (mapp <= 1 - th / 100) * zone
+    #                 mapp_both = ((mapp >= 1 + th / 100) + (mapp <= 1 - th / 100)) * zone
+                    
+    #                 if j == 0: # x maps
+    #                     mapp_both_frame_x.append(mapp_both)
+    #                     map_frame[frame, i, :, :] = mapp_both
+    #                 elif j == 1: # y maps
+    #                     mapp_both_combine_frame = mapp_both + mapp_both_frame_x[0]
+    #                     map_frame[frame, i, :, :] = mapp_both_combine_frame
+    #         start_r = radii[i]
+                        
+    #     count_map = np.zeros((len(radii), maps_dxdy[0].shape[0], maps_dxdy[0].shape[1]))
+    #     thres_map = np.zeros_like(count_map)
+    #     for i in range(len(radii)):
+    #         count_map[i, :, :] = np.sum(map_frame[:, i, :, :], axis=0)
+    #         plot_map_count(count_map[i])
+    #         thres_map[i, :, :] = np.where(count_map[i, :, :] > params['voting_threshold'], 1, 0)
+    #         summary['local_votes_combined_' + str(radii[i])] = np.count_nonzero(thres_map[i, :, :])
+    # except ValueError:
+    #     logger.error('Error calculating local central PS')
+    #     pass
+
     # Global PS
     map_distance = calc_distance(maps_xy[middle_frame_index], maps_xy[middle_frame_index][60, 60, :])
     map_unit = map_distance / map_fov + sys.float_info.epsilon # takes care of divide-by-zero warning
@@ -326,6 +428,7 @@ def eval_KPIs(df_frame, params, middle_frame_index, maps_xy, maps_dxdy):
             pass
             
     return summary
+
 
 @dispatch(pd.DataFrame, dict, pd.DataFrame, list, list, np.ndarray, np.ndarray)
 def eval_KPIs(df_frame, params, summary_df, maps_xy, maps_dxdy, middle_xy, middle_dxdy):
@@ -364,7 +467,7 @@ def eval_KPIs(df_frame, params, summary_df, maps_xy, maps_dxdy, middle_xy, middl
         map_dxdy_norm_fov = offset_map_fov(map_dxdy_norm, xi_fov, yi_fov, params['map_x_shift'], params['map_y_shift'])
         if params['filter_percent'] > 0:
             # Filter resultant map by removing filter_percent
-            axis = ['x', 'y']
+            axis = ['X', 'Y']
             filtered_map = np.empty(np.shape(map_dxdy_norm_fov))
             filtered_map.fill(np.nan)
             for j in range(len(axis)):
@@ -377,17 +480,57 @@ def eval_KPIs(df_frame, params, summary_df, maps_xy, maps_dxdy, middle_xy, middl
                 #     df = pd.DataFrame(resj)
                 #     df.to_csv(os.path.join(cf.output_path,'map_norm_dx_filtered.csv'))
                 
-            summary_local = calc_parametrics_local(filtered_map, map_fov)
+            summary_local = calc_parametrics_local(filtered_map, map_fov, params)
             summary.update(summary_local) 
-            plot_map_norm(filtered_map)
+            plot_map_norm(filtered_map, fname_str='Normalized_Map_')
         else:
-            summary_local = calc_parametrics_local(map_dxdy_norm_fov, map_fov)
-            summary.update(summary_local) 
-            plot_map_norm(map_dxdy_norm_fov)
+            summary_local = calc_parametrics_local(map_dxdy_norm_fov, map_fov, params)
+            summary.update(summary_local)
+            plot_map_norm(map_dxdy_norm_fov, fname_str='Normalized_Map_')
     except ValueError:
         logger.error('Error calculating and plotting local PS map')
         pass
     
+    # # Local Central PS 
+    # # For radial zones < 10, 15, 20 and 25, for each frame, calculate the thresholded th% map,
+    # # then generate a final count map based on a pre-defined voting threshold out of num_frames
+    # try:
+    #     start_r = -1
+    #     radii = [10, 15, 20, 25]  #need to start from small to large
+    #     axis = ['x', 'y']
+    #     th = 1  #in percent
+    #     map_frame = np.zeros((len(maps_dxdy), len(radii), maps_dxdy[0].shape[0], maps_dxdy[0].shape[1]))
+    #     for frame in range(len(maps_dxdy)):
+    #         map_dxdy_norm_frame = maps_dxdy[frame] / map_dxdy_median
+    #         map_dxdy_norm_fov_frame = offset_map_fov(map_dxdy_norm_frame, xi_fov, yi_fov, params['map_x_shift'], params['map_y_shift'])
+            
+    #         for i in range(len(radii)):
+    #             zone = (map_fov > start_r) * (map_fov <= radii[i])
+    #             mapp_both_frame_x = []
+    #             for j in range(len(axis)):            
+    #                 mapp = map_dxdy_norm_fov_frame[:, :, j]
+    #                 # mapp_pos = (mapp >= 1 + th / 100) * zone
+    #                 # mapp_neg = (mapp <= 1 - th / 100) * zone
+    #                 mapp_both = ((mapp >= 1 + th / 100) + (mapp <= 1 - th / 100)) * zone
+                    
+    #                 if j == 0: # x maps
+    #                     mapp_both_frame_x.append(mapp_both)
+    #                 elif j == 1: # y maps
+    #                     mapp_both_combine_frame = mapp_both + mapp_both_frame_x[0]
+    #                     map_frame[frame, i, :, :] = mapp_both_combine_frame
+    #             start_r = radii[i]
+                        
+    #     count_map = np.zeros((len(radii), maps_dxdy[0].shape[0], maps_dxdy[0].shape[1]))
+    #     thres_map = np.zeros_like(count_map)
+    #     for i in range(len(radii)):
+    #         count_map[i, :, :] = np.sum(map_frame[:, i, :, :], axis=0)
+    #         plot_map_count(count_map[i])
+    #         thres_map[i, :, :] = np.where(count_map[i, :, :] > params['voting_threshold'], 1, 0)
+    #         summary['local_votes_combined_' + str(radii[i])] = np.count_nonzero(thres_map[i, :, :])
+    # except ValueError:
+    #     logger.error('Error calculating local central PS')
+    #     pass
+        
     # Global PS
     map_distance = calc_distance(middle_xy, middle_xy[60, 60, :])
     map_unit = map_distance / map_fov + sys.float_info.epsilon # takes care of divide-by-zero warning
