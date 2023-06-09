@@ -52,6 +52,7 @@ def config(dataset_folder, params_file):
               'binary_threshold' : 100,
               'num_frames' : 10,
               'filter_percent' : 15,
+              'kernel_pp_size' : 5, # Window size for peak-to-peak calculations
               'map_y_shift' : 0, # For Stinson
               'map_x_shift' : 0} # For Stinson
         
