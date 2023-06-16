@@ -33,10 +33,14 @@ import numpy as np
 import pandas as pd
 import csv
 import logging
+import psutil
 import multiprocessing as mp
 import algo.blobs as blobs
 import algo.kpi as kpi
 import config.config as cf
+
+from tqdm import tqdm
+from time import sleep
 
 from functools import partial
 from datetime import timedelta
@@ -74,7 +78,7 @@ def pipeline(queue, df_lst, df_frame_lst, frame_nums, maps_xy, maps_dxdy, output
     mask = np.zeros_like(image_gray)
     cv2.circle(mask, (int(fov_dot.x), int(fov_dot.y)), int(np.sqrt(fov_dot.size / np.pi) + 7), 255, -1)
     image_gray = cv2.bitwise_and(image_gray, cv2.bitwise_not(mask))
-    cv2.imwrite(os.path.join(output_path, frame_num+'_no_fov.jpeg'), image_gray, [cv2.IMWRITE_JPEG_QUALITY, 40]) 
+    # cv2.imwrite(os.path.join(output_path, frame_num+'_no_fov.jpeg'), image_gray, [cv2.IMWRITE_JPEG_QUALITY, 40]) 
    
     frame = blobs.find_dots(image_gray, params)
     logger.info('Frame %s : Finding dots is complete, found %d dots', frame_num, len(frame.dots))
@@ -83,7 +87,7 @@ def pipeline(queue, df_lst, df_frame_lst, frame_nums, maps_xy, maps_dxdy, output
     logger.info('Frame %s : Center dot was found at %s', frame_num, frame.center_dot.__str__())
     
     blobs.draw_dots(image, [fov_dot, frame.center_dot], os.path.join(output_path, frame_num+'_fov_center_dots.jpeg')) # For debugging center and FOV dot detection
-    blobs.draw_dots(image, frame.dots, os.path.join(output_path, frame_num+'_dots.jpeg')) # For debugging blob detection
+    # blobs.draw_dots(image, frame.dots, os.path.join(output_path, frame_num+'_dots.jpeg')) # For debugging blob detection
     
     med_size, med_dist = frame.calc_dot_size_dist()
     logger.info('Frame %s Dot Size: %0.2f Distance: %0.2f', frame_num, med_size, med_dist)
@@ -95,7 +99,7 @@ def pipeline(queue, df_lst, df_frame_lst, frame_nums, maps_xy, maps_dxdy, output
     logger.info('Frame %s HSlope: %0.2f VSlope: %0.2f', frame_num, hor_slope, ver_slope)
     
     hor_lines, ver_lines = frame.group_lines()
-    frame.draw_lines_on_image(image, width, height, filepath=os.path.join(output_path, frame_num+'_grouped.jpeg'))
+    # frame.draw_lines_on_image(image, width, height, filepath=os.path.join(output_path, frame_num+'_grouped.jpeg'))
     frame.find_index(logger, frame_num)
     logger.info('Finished indexing calculations for frame %s', frame_num)
     
@@ -139,6 +143,7 @@ def pipeline(queue, df_lst, df_frame_lst, frame_nums, maps_xy, maps_dxdy, output
  
     
 if __name__ == '__main__':
+    multiprocessing.freeze_support()    # For Windows Binary Development
     current_path = os.getcwd()
     dataset_folder = ''
     params_file = ''
@@ -269,8 +274,8 @@ if __name__ == '__main__':
         
         no_overlay_frame.generate_map_xy(logger, '1001')
         no_overlay_frame.generate_map_dxdy(params['dxdy_spacing'])  #4x spacing
-            
-        kpi.find_outliers(df_frame, width=4024, height=3036)
+
+        kpi.find_outliers(df_frame, width=4024, height=3036)    
         summary_df = pd.DataFrame({'frame_num': '1000-1001',
                                       'total_dots' : len(no_overlay_frame.dots),
                                       'center_dot_x' : no_overlay_frame.center_dot.x, 'center_dot_y' : no_overlay_frame.center_dot.y,
@@ -279,6 +284,11 @@ if __name__ == '__main__':
                                       'hor_slope' : no_overlay_hor_slope, 'ver_slope' : no_overlay_ver_slope,
                                       'dxdy_spacing' : params['dxdy_spacing'], 'map_x_shift' : params['map_x_shift'],
                                       'map_y_shift' : params['map_y_shift']}, index=[0])
+        summary_df['num_frames'] = df_frame['num_frames']
+        summary_df['num_center_dot_outlier'] = df_frame['num_center_dot_outlier']
+        summary_df['num_fov_dot_outlier'] = df_frame['num_fov_dot_outlier']
+        summary_df['num_slope_outlier'] = df_frame['num_slope_outlier']
+        summary_df['num_total_outlier'] = df_frame['num_total_outlier']
         summary = kpi.eval_KPIs(df_frame, params, summary_df, maps_xy, maps_dxdy, no_overlay_frame.map_xy, no_overlay_frame.map_dxdy)
     else:
         middle_frame_index = kpi.find_middle_frame(df_frame, width=4024, height=3036)

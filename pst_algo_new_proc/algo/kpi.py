@@ -169,116 +169,135 @@ def offset_map_fov (map_input, xi_fov, yi_fov, x_shift=0, y_shift=0):
     return map_output
 
     
-def calc_parametrics_local(map_local, map_fov, params):
+def calc_local_peripheral(map_local, map_fov, params):
     #calculate the parametrics based on the map
     summary = {}
-    start_r = -1
-    radii = [25, 35, 45, 60]  #need to start from small to large
+    start_r = 25
+    radii = [35, 45]  #need to start from small to large
     axis = ['X', 'Y']
     th = [0.5, 1, 5]  #in percent
     k = params['kernel_pp_size'] # window size for peak-to-peak calculations
     
-    #define zones
     for i in range(len(radii)):
         zone = (map_fov > start_r) * (map_fov <= radii[i])
-        if radii[i] in [35, 45]:
-            mapp_both_x_L = []
-            mapp_both_x_R = []
-        else:
-            mapp_both_x = []
+        mapp_both_x_L = []
+        mapp_both_x_R = []
         for j in range(len(axis)):            
             mapp = map_local[:, :, j].T
             # Split map further to compare Nasal and Temporal Zones
-            if radii[i] in [35, 45]:
-                summary['local_areatotal_d' + axis[j] + '_' + str(radii[i])] = np.count_nonzero(~np.isnan(mapp[zone]))
-                summary['local_max_d' + axis[j] + '_' + str(radii[i])] = (np.nanmax(mapp[zone]) - 1) * 100
-                summary['local_min_d' + axis[j] + '_' + str(radii[i])] = (np.nanmin(mapp[zone]) - 1) * 100
-                summary['local_rms_d' + axis[j] + '_' + str(radii[i])] = (np.nanstd(mapp[zone])) * 100
-                
-                xx_L, yy_L = np.meshgrid(np.linspace(-60, 0, 61), np.linspace(-60, 60, 121))
-                xx_R, yy_R = np.meshgrid(np.linspace(0, 60, 61), np.linspace(-60, 60, 121))
-                map_fov_L = np.sqrt(xx_L ** 2 + yy_L ** 2) + sys.float_info.epsilon # takes care of divide-by-zero warning
-                map_fov_R = np.sqrt(xx_R ** 2 + yy_R ** 2) + sys.float_info.epsilon # takes care of divide-by-zero warning
-                zone_L = np.concatenate(((map_fov_L > start_r) * (map_fov_L <= radii[i]), np.zeros((121, 60), dtype=bool)), axis=1)
-                zone_R = np.concatenate((np.zeros((121, 60), dtype=bool), (map_fov_R > start_r) * (map_fov_R <= radii[i])), axis=1)
-                
-                summary['local_pct99_d' + axis[j] + '_' + str(radii[i]) + '_L'] = (np.nanpercentile(mapp[zone_L], 99) - 1) * 100
-                summary['local_pct1_d' + axis[j] + '_' + str(radii[i]) + '_L'] = (np.nanpercentile(mapp[zone_L], 1) - 1) * 100
-                summary['local_pct99_d' + axis[j] + '_' + str(radii[i]) + '_R'] = (np.nanpercentile(mapp[zone_R], 99) - 1) * 100
-                summary['local_pct1_d' + axis[j] + '_' + str(radii[i]) + '_R'] = (np.nanpercentile(mapp[zone_R], 1) - 1) * 100
-                
-                summary['local_pp_d' + axis[j] + '_' + str(radii[i]) + '_L'] = summary['local_pct99_d' + axis[j]
-                                                        + '_' + str(radii[i]) + '_L'] - summary['local_pct1_d' + axis[j] + '_' + str(radii[i]) + '_L']
-                summary['local_pp_d' + axis[j] + '_' + str(radii[i]) + '_R'] = summary['local_pct99_d' + axis[j]
-                                                        + '_' + str(radii[i]) + '_R'] - summary['local_pct1_d' + axis[j] + '_' + str(radii[i]) + '_R']                
-                # Peak-to-Peak Maps
-                zone_mapp_L = np.where(zone_L, mapp, np.nan)
-                max_mapp_L = np.max(sliding_window_view(zone_mapp_L, window_shape=(k, k)), axis=(2, 3))
-                min_mapp_L = np.min(sliding_window_view(zone_mapp_L, window_shape=(k, k)), axis=(2, 3))
-                pp_mapp_L = max_mapp_L - min_mapp_L
-                pp_L = np.pad(pp_mapp_L, pad_width=int(k/2), mode='constant', constant_values=np.nan)
-                plot_map_norm(pp_L, fname_str='Peak-to-Peak_' + axis[j] + '_map_' + str(radii[i]) + '_degree_zone_L')
-                
-                zone_mapp_R = np.where(zone_R, mapp, np.nan)
-                max_mapp_R = np.max(sliding_window_view(zone_mapp_R, window_shape=(k, k)), axis=(2, 3))
-                min_mapp_R = np.min(sliding_window_view(zone_mapp_R, window_shape=(k, k)), axis=(2, 3))
-                pp_mapp_R = max_mapp_R - min_mapp_R
-                pp_R = np.pad(pp_mapp_R, pad_width=int(k/2), mode='constant', constant_values=np.nan)
-                plot_map_norm(pp_R, fname_str='Peak-to-Peak_' + axis[j] + '_map_' + str(radii[i]) + '_degree_zone_R')
-                
-                for k in range(len(th)): 
-                    mapp_pos_L = (mapp >= 1 + th[k] / 100) * zone_L
-                    mapp_pos_R = (mapp >= 1 + th[k] / 100) * zone_R
-                    mapp_neg_L = (mapp <= 1 - th[k] / 100) * zone_L
-                    mapp_neg_R = (mapp <= 1 - th[k] / 100) * zone_R
-                    mapp_both_L = ((mapp >= 1 + th[k] / 100) + (mapp <= 1 - th[k] / 100)) * zone_L
-                    mapp_both_R = ((mapp >= 1 + th[k] / 100) + (mapp <= 1 - th[k] / 100)) * zone_R
-                    summary['local_area_d' + axis[j] + '_th' + str(th[k]) + 'pctpos_' + str(radii[i]) + '_L'] = np.count_nonzero(mapp_pos_L)
-                    summary['local_area_d' + axis[j] + '_th' + str(th[k]) + 'pctneg_' + str(radii[i]) + '_L'] = np.count_nonzero(mapp_neg_L)
-                    summary['local_area_d' + axis[j] + '_th'  + str(th[k]) + 'pct_' + str(radii[i]) + '_L'] = np.count_nonzero(mapp_both_L)
-                    summary['local_area_d' + axis[j] + '_th' + str(th[k]) + 'pctpos_' + str(radii[i]) + '_R'] = np.count_nonzero(mapp_pos_R)
-                    summary['local_area_d' + axis[j] + '_th' + str(th[k]) + 'pctneg_' + str(radii[i]) + '_R'] = np.count_nonzero(mapp_neg_R)
-                    summary['local_area_d' + axis[j] + '_th' + str(th[k]) + 'pct_' + str(radii[i]) + '_R'] = np.count_nonzero(mapp_both_R)
-                    if j == 0: # x maps
-                        mapp_both_x_L.append(mapp_both_L)
-                        mapp_both_x_R.append(mapp_both_R)
-                    elif j == 1: # y maps
-                        mapp_both_combine_L = mapp_both_L + mapp_both_x_L[k]
-                        summary['local_area_combined_th' + str(th[k]) + 'pct_' + str(radii[i]) + '_L'] = np.count_nonzero(mapp_both_combine_L)
-                        mapp_both_combine_R = mapp_both_R + mapp_both_x_R[k]
-                        summary['local_area_combined_th' + str(th[k]) + 'pct_' + str(radii[i]) + '_R'] = np.count_nonzero(mapp_both_combine_R)
+            summary['local_areatotal_d' + axis[j] + '_' + str(radii[i])] = np.count_nonzero(~np.isnan(mapp[zone]))
+            summary['local_max_d' + axis[j] + '_' + str(radii[i])] = (np.nanmax(mapp[zone]) - 1) * 100
+            summary['local_min_d' + axis[j] + '_' + str(radii[i])] = (np.nanmin(mapp[zone]) - 1) * 100
+            summary['local_rms_d' + axis[j] + '_' + str(radii[i])] = (np.nanstd(mapp[zone])) * 100
             
-            else:
-                summary['local_areatotal_d' + axis[j] + '_' + str(radii[i])] = np.count_nonzero(~np.isnan(mapp[zone]))
-                summary['local_max_d' + axis[j] + '_' + str(radii[i])] = (np.nanmax(mapp[zone]) - 1) * 100
-                summary['local_min_d' + axis[j] + '_' + str(radii[i])] = (np.nanmin(mapp[zone]) - 1) * 100
-                summary['local_pct99_d' + axis[j] + '_' + str(radii[i])] = (np.nanpercentile(mapp[zone], 99) - 1) * 100
-                summary['local_pct1_d' + axis[j] + '_' + str(radii[i])] = (np.nanpercentile(mapp[zone], 1) - 1) * 100
-                summary['local_rms_d' + axis[j] + '_' + str(radii[i])] = (np.nanstd(mapp[zone])) * 100
-                summary['local_pp_d' + axis[j] + '_' + str(radii[i])] = summary['local_pct99_d' + axis[j]
-                                                        + '_' + str(radii[i])] - summary['local_pct1_d' + axis[j] + '_' + str(radii[i])]
-                # Peak-to-Peak Maps
-                if radii[i] == 25:
-                    zone_mapp = np.where(zone, mapp, np.nan)
-                    max_mapp = np.max(sliding_window_view(zone_mapp, window_shape=(k, k)), axis=(2, 3))
-                    min_mapp = np.min(sliding_window_view(zone_mapp, window_shape=(k, k)), axis=(2, 3))
-                    pp_mapp = max_mapp - min_mapp
-                    pp = np.pad(pp_mapp, pad_width=int(k/2), mode='constant', constant_values=np.nan)
-                    plot_map_norm(pp, fname_str='Peak-to-Peak_' + axis[j] + '_map_' + str(radii[i]) + '_degree_zone')
-                
-                for k in range(len(th)): 
-                    mapp_pos = (mapp >= 1 + th[k] / 100) * zone
-                    mapp_neg = (mapp <= 1 - th[k] / 100) * zone
-                    mapp_both = ((mapp >= 1 + th[k] / 100) + (mapp <= 1 - th[k] / 100)) * zone
-                    summary['local_area_d' + axis[j] + '_th'+ str(th[k]) + 'pctpos_' + str(radii[i])] = np.count_nonzero(mapp_pos)
-                    summary['local_area_d' + axis[j] + '_th'+ str(th[k]) + 'pctneg_' + str(radii[i])] = np.count_nonzero(mapp_neg)
-                    summary['local_area_d' + axis[j] + '_th' + str(th[k]) + 'pct_' + str(radii[i])] = np.count_nonzero(mapp_both)
-                    if j == 0: # x maps
-                        mapp_both_x.append(mapp_both)
-                    elif j == 1: # y maps
-                        mapp_both_combine = mapp_both + mapp_both_x[k]
-                        summary['local_area_combined_th' + str(th[k]) + 'pct_' + str(radii[i])] = np.count_nonzero(mapp_both_combine)
+            xx_L, yy_L = np.meshgrid(np.linspace(-60, 0, 61), np.linspace(-60, 60, 121))
+            xx_R, yy_R = np.meshgrid(np.linspace(0, 60, 61), np.linspace(-60, 60, 121))
+            map_fov_L = np.sqrt(xx_L ** 2 + yy_L ** 2) + sys.float_info.epsilon # takes care of divide-by-zero warning
+            map_fov_R = np.sqrt(xx_R ** 2 + yy_R ** 2) + sys.float_info.epsilon # takes care of divide-by-zero warning
+            zone_L = np.concatenate(((map_fov_L > start_r) * (map_fov_L <= radii[i]), np.zeros((121, 60), dtype=bool)), axis=1)
+            zone_R = np.concatenate((np.zeros((121, 60), dtype=bool), (map_fov_R > start_r) * (map_fov_R <= radii[i])), axis=1)
+            
+            summary['local_pct99_d' + axis[j] + '_' + str(radii[i]) + '_L'] = (np.nanpercentile(mapp[zone_L], 99) - 1) * 100
+            summary['local_pct1_d' + axis[j] + '_' + str(radii[i]) + '_L'] = (np.nanpercentile(mapp[zone_L], 1) - 1) * 100
+            summary['local_rms_d' + axis[j] + '_' + str(radii[i]) + '_L'] = (np.nanstd(mapp[zone_L])) * 100
+            summary['local_pct99_d' + axis[j] + '_' + str(radii[i]) + '_R'] = (np.nanpercentile(mapp[zone_R], 99) - 1) * 100
+            summary['local_pct1_d' + axis[j] + '_' + str(radii[i]) + '_R'] = (np.nanpercentile(mapp[zone_R], 1) - 1) * 100
+            summary['local_rms_d' + axis[j] + '_' + str(radii[i]) + '_R'] = (np.nanstd(mapp[zone_R])) * 100
+            
+            summary['local_pp_d' + axis[j] + '_' + str(radii[i]) + '_L'] = summary['local_pct99_d' + axis[j]
+                                                    + '_' + str(radii[i]) + '_L'] - summary['local_pct1_d' + axis[j] + '_' + str(radii[i]) + '_L']
+            summary['local_pp_d' + axis[j] + '_' + str(radii[i]) + '_R'] = summary['local_pct99_d' + axis[j]
+                                                    + '_' + str(radii[i]) + '_R'] - summary['local_pct1_d' + axis[j] + '_' + str(radii[i]) + '_R']                
+            # Peak-to-Peak Maps
+            zone_mapp_L = np.where(zone_L, mapp, np.nan)
+            max_mapp_L = np.max(sliding_window_view(zone_mapp_L, window_shape=(k, k)), axis=(2, 3))
+            min_mapp_L = np.min(sliding_window_view(zone_mapp_L, window_shape=(k, k)), axis=(2, 3))
+            pp_mapp_L = max_mapp_L - min_mapp_L
+            pp_L = np.pad(pp_mapp_L, pad_width=int(k/2), mode='constant', constant_values=np.nan)
+            plot_map_norm(pp_L, fname_str='Peak-to-Peak_' + axis[j] + '_map_' + str(radii[i]) + '_degree_zone_L')
+            summary['kernel_pct99_d' + axis[j] + '_' + str(radii[i]) + '_L'] = (np.nanpercentile(pp_L, 99) - 1) * 100
+            summary['kernel_pct1_d' + axis[j] + '_' + str(radii[i]) + '_L'] = (np.nanpercentile(pp_L, 1) - 1) * 100
+            summary['kernel_rms_d' + axis[j] + '_' + str(radii[i]) + '_L'] = (np.nanstd(pp_L)) * 100
+            
+            zone_mapp_R = np.where(zone_R, mapp, np.nan)
+            max_mapp_R = np.max(sliding_window_view(zone_mapp_R, window_shape=(k, k)), axis=(2, 3))
+            min_mapp_R = np.min(sliding_window_view(zone_mapp_R, window_shape=(k, k)), axis=(2, 3))
+            pp_mapp_R = max_mapp_R - min_mapp_R
+            pp_R = np.pad(pp_mapp_R, pad_width=int(k/2), mode='constant', constant_values=np.nan)
+            plot_map_norm(pp_R, fname_str='Peak-to-Peak_' + axis[j] + '_map_' + str(radii[i]) + '_degree_zone_R')
+            summary['kernel_pct99_d' + axis[j] + '_' + str(radii[i]) + '_R'] = (np.nanpercentile(pp_R, 99) - 1) * 100
+            summary['kernel_pct1_d' + axis[j] + '_' + str(radii[i]) + '_R'] = (np.nanpercentile(pp_R, 1) - 1) * 100
+            summary['kernel_rms_d' + axis[j] + '_' + str(radii[i]) + '_R'] = (np.nanstd(pp_R)) * 100
+            
+            for k in range(len(th)): 
+                mapp_pos_L = (mapp >= 1 + th[k] / 100) * zone_L
+                mapp_pos_R = (mapp >= 1 + th[k] / 100) * zone_R
+                mapp_neg_L = (mapp <= 1 - th[k] / 100) * zone_L
+                mapp_neg_R = (mapp <= 1 - th[k] / 100) * zone_R
+                mapp_both_L = ((mapp >= 1 + th[k] / 100) + (mapp <= 1 - th[k] / 100)) * zone_L
+                mapp_both_R = ((mapp >= 1 + th[k] / 100) + (mapp <= 1 - th[k] / 100)) * zone_R
+                summary['local_area_d' + axis[j] + '_th' + str(th[k]) + 'pctpos_' + str(radii[i]) + '_L'] = np.count_nonzero(mapp_pos_L)
+                summary['local_area_d' + axis[j] + '_th' + str(th[k]) + 'pctneg_' + str(radii[i]) + '_L'] = np.count_nonzero(mapp_neg_L)
+                summary['local_area_d' + axis[j] + '_th'  + str(th[k]) + 'pct_' + str(radii[i]) + '_L'] = np.count_nonzero(mapp_both_L)
+                summary['local_area_d' + axis[j] + '_th' + str(th[k]) + 'pctpos_' + str(radii[i]) + '_R'] = np.count_nonzero(mapp_pos_R)
+                summary['local_area_d' + axis[j] + '_th' + str(th[k]) + 'pctneg_' + str(radii[i]) + '_R'] = np.count_nonzero(mapp_neg_R)
+                summary['local_area_d' + axis[j] + '_th' + str(th[k]) + 'pct_' + str(radii[i]) + '_R'] = np.count_nonzero(mapp_both_R)
+                if j == 0: # x maps
+                    mapp_both_x_L.append(mapp_both_L)
+                    mapp_both_x_R.append(mapp_both_R)
+                elif j == 1: # y maps
+                    mapp_both_combine_L = mapp_both_L + mapp_both_x_L[k]
+                    summary['local_area_combined_th' + str(th[k]) + 'pct_' + str(radii[i]) + '_L'] = np.count_nonzero(mapp_both_combine_L)
+                    mapp_both_combine_R = mapp_both_R + mapp_both_x_R[k]
+                    summary['local_area_combined_th' + str(th[k]) + 'pct_' + str(radii[i]) + '_R'] = np.count_nonzero(mapp_both_combine_R)
         start_r = radii[i]        
+    return summary
+
+def calc_local_central(map_local, map_fov, params):
+    #calculate the parametrics based on the map
+    summary = {}
+    start_r = -1
+    radii = 25  
+    axis = ['X', 'Y']
+    th = [0.5, 1, 5]  #in percent
+    k = params['kernel_pp_size'] # window size for peak-to-peak calculations
+    
+    zone = (map_fov > start_r) * (map_fov <= radii)
+    mapp_both_x = []
+    for j in range(len(axis)):            
+        mapp = map_local[:, :, j].T
+        summary['local_areatotal_d' + axis[j] + '_' + str(radii)] = np.count_nonzero(~np.isnan(mapp[zone]))
+        summary['local_max_d' + axis[j] + '_' + str(radii)] = (np.nanmax(mapp[zone]) - 1) * 100
+        summary['local_min_d' + axis[j] + '_' + str(radii)] = (np.nanmin(mapp[zone]) - 1) * 100
+        summary['local_pct99_d' + axis[j] + '_' + str(radii)] = (np.nanpercentile(mapp[zone], 99) - 1) * 100
+        summary['local_pct1_d' + axis[j] + '_' + str(radii)] = (np.nanpercentile(mapp[zone], 1) - 1) * 100
+        summary['local_rms_d' + axis[j] + '_' + str(radii)] = (np.nanstd(mapp[zone])) * 100
+        summary['local_pp_d' + axis[j] + '_' + str(radii)] = summary['local_pct99_d' + axis[j]
+                                                + '_' + str(radii)] - summary['local_pct1_d' + axis[j] + '_' + str(radii)]
+        # Peak-to-Peak Maps
+        zone_mapp = np.where(zone, mapp, np.nan)
+        max_mapp = np.max(sliding_window_view(zone_mapp, window_shape=(k, k)), axis=(2, 3))
+        min_mapp = np.min(sliding_window_view(zone_mapp, window_shape=(k, k)), axis=(2, 3))
+        pp_mapp = max_mapp - min_mapp
+        pp = np.pad(pp_mapp, pad_width=int(k/2), mode='constant', constant_values=np.nan)
+        plot_map_norm(pp, fname_str='Peak-to-Peak_' + axis[j] + '_map_' + str(radii) + '_degree_zone')
+        summary['kernel_rms_d' + axis[j] + '_' + str(radii)] = (np.nanstd(pp)) * 100
+        summary['kernel_pct99_d' + axis[j] + '_' + str(radii)] = (np.nanpercentile(pp, 99) - 1) * 100
+        summary['kernel_pct1_d' + axis[j] + '_' + str(radii)] = (np.nanpercentile(pp, 1) - 1) * 100
+        
+        for k in range(len(th)): 
+            mapp_pos = (mapp >= 1 + th[k] / 100) * zone
+            mapp_neg = (mapp <= 1 - th[k] / 100) * zone
+            mapp_both = ((mapp >= 1 + th[k] / 100) + (mapp <= 1 - th[k] / 100)) * zone
+            summary['local_area_d' + axis[j] + '_th'+ str(th[k]) + 'pctpos_' + str(radii)] = np.count_nonzero(mapp_pos)
+            summary['local_area_d' + axis[j] + '_th'+ str(th[k]) + 'pctneg_' + str(radii)] = np.count_nonzero(mapp_neg)
+            summary['local_area_d' + axis[j] + '_th' + str(th[k]) + 'pct_' + str(radii)] = np.count_nonzero(mapp_both)
+            if j == 0: # x maps
+                mapp_both_x.append(mapp_both)
+            elif j == 1: # y maps
+                mapp_both_combine = mapp_both + mapp_both_x[k]
+                summary['local_area_combined_th' + str(th[k]) + 'pct_' + str(radii)] = np.count_nonzero(mapp_both_combine)
+
     return summary
 
 
@@ -334,76 +353,40 @@ def eval_KPIs(df_frame, params, middle_frame_index, maps_xy, maps_dxdy):
     
     # Local PS
     try:
-        map_dxdy_norm = maps_dxdy[middle_frame_index] / map_dxdy_median # Normalize map_dxdy
-        map_dxdy_norm_fov = offset_map_fov(map_dxdy_norm, xi_fov, yi_fov, params['map_x_shift'], params['map_y_shift'])
+        middle_map_dxdy_norm = maps_dxdy[middle_frame_index] / map_dxdy_median # Normalize map_dxdy
+        middle_map_dxdy_norm_fov = offset_map_fov(middle_map_dxdy_norm, xi_fov, yi_fov, params['map_x_shift'], params['map_y_shift'])
+        avg_map_dxdy = np.mean(maps_dxdy, axis=0)
+        avg_map_dxdy_fov = offset_map_fov(avg_map_dxdy, xi_fov, yi_fov, params['map_x_shift'], params['map_y_shift'])
         if params['filter_percent'] > 0:
             # Filter resultant map by removing filter_percent
             axis = ['X', 'Y']
-            filtered_map = np.empty(np.shape(map_dxdy_norm_fov))
+            filtered_map = np.empty(np.shape(middle_map_dxdy_norm_fov))
             filtered_map.fill(np.nan)
             for j in range(len(axis)):
-                mapj = map_dxdy_norm_fov[:, :, j]
+                mapj = middle_map_dxdy_norm_fov[:, :, j]
                 upper = 1 + (params['filter_percent'] / 100)
                 lower = 1 - (params['filter_percent'] / 100)
                 resj = np.where(((mapj > upper) | (mapj < lower)) & (upper > lower), np.nan, mapj)
                 filtered_map[:, :, j] = resj
-                if j == 0:
-                    df = pd.DataFrame(resj)
-                    df.to_csv(os.path.join(cf.output_path,'map_norm_dx_filtered.csv'))
+                # if j == 0:
+                #     df = pd.DataFrame(resj)
+                #     df.to_csv(os.path.join(cf.output_path,'map_norm_dx_filtered.csv'))
                 
-            summary_local = calc_parametrics_local(filtered_map, map_fov, params)
-            summary.update(summary_local) 
             plot_map_norm(filtered_map, fname_str='Normalized_Map_')
-        else:
-            summary_local = calc_parametrics_local(map_dxdy_norm_fov, map_fov, params)
+            summary_local = calc_local_peripheral(filtered_map, map_fov, params)
+            summary.update(summary_local) 
+            summary_local = calc_local_central(avg_map_dxdy_fov, map_fov, params)
             summary.update(summary_local)
-            plot_map_norm(map_dxdy_norm_fov, fname_str='Normalized_Map_')
+        else:
+            plot_map_norm(middle_map_dxdy_norm_fov, fname_str='Normalized_Map_')
+            summary_local = calc_local_peripheral(middle_map_dxdy_norm_fov, map_fov, params)
+            summary.update(summary_local)
+            summary_local = calc_local_central(avg_map_dxdy_fov, map_fov, params)
+            summary.update(summary_local)
     except ValueError:
         logger.error('Error calculating and plotting local PS map')
         pass
     
-    # # Local Central PS 
-    # # For radial zones < 10, 15, 20 and 25, for each frame, calculate the thresholded th% map,
-    # # then generate a final count map based on a pre-defined voting threshold out of num_frames
-    # try:
-    #     start_r = -1
-    #     radii = [10, 15, 20, 25]  #need to start from small to large
-    #     #axis = ['x', 'y']
-    #     axis = ['x']
-    #     th = 0.5  #in percent
-    #     map_frame = np.zeros((len(maps_dxdy), len(radii), maps_dxdy[0].shape[0], maps_dxdy[0].shape[1]))
-    #     for frame in range(len(maps_dxdy)):
-    #         map_dxdy_norm_frame = maps_dxdy[frame] / map_dxdy_median
-    #         map_dxdy_norm_fov_frame = offset_map_fov(map_dxdy_norm_frame, xi_fov, yi_fov, params['map_x_shift'], params['map_y_shift'])
-            
-    #         for i in range(len(radii)):
-    #             zone = (map_fov > start_r) * (map_fov <= radii[i])
-    #             mapp_both_frame_x = []
-    #             for j in range(len(axis)):            
-    #                 mapp = map_dxdy_norm_fov_frame[:, :, j]
-    #                 # mapp_pos = (mapp >= 1 + th / 100) * zone
-    #                 # mapp_neg = (mapp <= 1 - th / 100) * zone
-    #                 mapp_both = ((mapp >= 1 + th / 100) + (mapp <= 1 - th / 100)) * zone
-                    
-    #                 if j == 0: # x maps
-    #                     mapp_both_frame_x.append(mapp_both)
-    #                     map_frame[frame, i, :, :] = mapp_both
-    #                 elif j == 1: # y maps
-    #                     mapp_both_combine_frame = mapp_both + mapp_both_frame_x[0]
-    #                     map_frame[frame, i, :, :] = mapp_both_combine_frame
-    #         start_r = radii[i]
-                        
-    #     count_map = np.zeros((len(radii), maps_dxdy[0].shape[0], maps_dxdy[0].shape[1]))
-    #     thres_map = np.zeros_like(count_map)
-    #     for i in range(len(radii)):
-    #         count_map[i, :, :] = np.sum(map_frame[:, i, :, :], axis=0)
-    #         plot_map_count(count_map[i])
-    #         thres_map[i, :, :] = np.where(count_map[i, :, :] > params['voting_threshold'], 1, 0)
-    #         summary['local_votes_combined_' + str(radii[i])] = np.count_nonzero(thres_map[i, :, :])
-    # except ValueError:
-    #     logger.error('Error calculating local central PS')
-    #     pass
-
     # Global PS
     map_distance = calc_distance(maps_xy[middle_frame_index], maps_xy[middle_frame_index][60, 60, :])
     map_unit = map_distance / map_fov + sys.float_info.epsilon # takes care of divide-by-zero warning
@@ -463,15 +446,17 @@ def eval_KPIs(df_frame, params, summary_df, maps_xy, maps_dxdy, middle_xy, middl
     
     # Local PS
     try:
-        map_dxdy_norm = middle_dxdy / map_dxdy_median # Normalize map_dxdy
-        map_dxdy_norm_fov = offset_map_fov(map_dxdy_norm, xi_fov, yi_fov, params['map_x_shift'], params['map_y_shift'])
+        middle_map_dxdy_norm = middle_dxdy / map_dxdy_median # Normalize map_dxdy
+        middle_map_dxdy_norm_fov = offset_map_fov(middle_map_dxdy_norm, xi_fov, yi_fov, params['map_x_shift'], params['map_y_shift'])
+        avg_map_dxdy = np.mean(maps_dxdy, axis=0)
+        avg_map_dxdy_fov = offset_map_fov(avg_map_dxdy, xi_fov, yi_fov, params['map_x_shift'], params['map_y_shift'])
         if params['filter_percent'] > 0:
             # Filter resultant map by removing filter_percent
             axis = ['X', 'Y']
-            filtered_map = np.empty(np.shape(map_dxdy_norm_fov))
+            filtered_map = np.empty(np.shape(middle_map_dxdy_norm_fov))
             filtered_map.fill(np.nan)
             for j in range(len(axis)):
-                mapj = map_dxdy_norm_fov[:, :, j]
+                mapj = middle_map_dxdy_norm_fov[:, :, j]
                 upper = 1 + (params['filter_percent'] / 100)
                 lower = 1 - (params['filter_percent'] / 100)
                 resj = np.where(((mapj > upper) | (mapj < lower)) & (upper > lower), np.nan, mapj)
@@ -480,56 +465,22 @@ def eval_KPIs(df_frame, params, summary_df, maps_xy, maps_dxdy, middle_xy, middl
                 #     df = pd.DataFrame(resj)
                 #     df.to_csv(os.path.join(cf.output_path,'map_norm_dx_filtered.csv'))
                 
-            summary_local = calc_parametrics_local(filtered_map, map_fov, params)
-            summary.update(summary_local) 
             plot_map_norm(filtered_map, fname_str='Normalized_Map_')
-        else:
-            summary_local = calc_parametrics_local(map_dxdy_norm_fov, map_fov, params)
+            summary_local = calc_local_peripheral(filtered_map, map_fov, params)
+            summary.update(summary_local) 
+            summary_local = calc_local_central(avg_map_dxdy_fov, map_fov, params)
+            #summary_local = calc_local_central(middle_map_dxdy_norm_fov, map_fov, params)
             summary.update(summary_local)
-            plot_map_norm(map_dxdy_norm_fov, fname_str='Normalized_Map_')
+        else:
+            plot_map_norm(middle_map_dxdy_norm_fov, fname_str='Normalized_Map_')
+            summary_local = calc_local_peripheral(middle_map_dxdy_norm_fov, map_fov, params)
+            summary.update(summary_local)
+            summary_local = calc_local_central(avg_map_dxdy_fov, map_fov, params)
+            #summary_local = calc_local_central(middle_map_dxdy_norm_fov, map_fov, params)
+            summary.update(summary_local)
     except ValueError:
         logger.error('Error calculating and plotting local PS map')
         pass
-    
-    # # Local Central PS 
-    # # For radial zones < 10, 15, 20 and 25, for each frame, calculate the thresholded th% map,
-    # # then generate a final count map based on a pre-defined voting threshold out of num_frames
-    # try:
-    #     start_r = -1
-    #     radii = [10, 15, 20, 25]  #need to start from small to large
-    #     axis = ['x', 'y']
-    #     th = 1  #in percent
-    #     map_frame = np.zeros((len(maps_dxdy), len(radii), maps_dxdy[0].shape[0], maps_dxdy[0].shape[1]))
-    #     for frame in range(len(maps_dxdy)):
-    #         map_dxdy_norm_frame = maps_dxdy[frame] / map_dxdy_median
-    #         map_dxdy_norm_fov_frame = offset_map_fov(map_dxdy_norm_frame, xi_fov, yi_fov, params['map_x_shift'], params['map_y_shift'])
-            
-    #         for i in range(len(radii)):
-    #             zone = (map_fov > start_r) * (map_fov <= radii[i])
-    #             mapp_both_frame_x = []
-    #             for j in range(len(axis)):            
-    #                 mapp = map_dxdy_norm_fov_frame[:, :, j]
-    #                 # mapp_pos = (mapp >= 1 + th / 100) * zone
-    #                 # mapp_neg = (mapp <= 1 - th / 100) * zone
-    #                 mapp_both = ((mapp >= 1 + th / 100) + (mapp <= 1 - th / 100)) * zone
-                    
-    #                 if j == 0: # x maps
-    #                     mapp_both_frame_x.append(mapp_both)
-    #                 elif j == 1: # y maps
-    #                     mapp_both_combine_frame = mapp_both + mapp_both_frame_x[0]
-    #                     map_frame[frame, i, :, :] = mapp_both_combine_frame
-    #             start_r = radii[i]
-                        
-    #     count_map = np.zeros((len(radii), maps_dxdy[0].shape[0], maps_dxdy[0].shape[1]))
-    #     thres_map = np.zeros_like(count_map)
-    #     for i in range(len(radii)):
-    #         count_map[i, :, :] = np.sum(map_frame[:, i, :, :], axis=0)
-    #         plot_map_count(count_map[i])
-    #         thres_map[i, :, :] = np.where(count_map[i, :, :] > params['voting_threshold'], 1, 0)
-    #         summary['local_votes_combined_' + str(radii[i])] = np.count_nonzero(thres_map[i, :, :])
-    # except ValueError:
-    #     logger.error('Error calculating local central PS')
-    #     pass
         
     # Global PS
     map_distance = calc_distance(middle_xy, middle_xy[60, 60, :])
@@ -559,7 +510,7 @@ def eval_KPIs(df_frame, params, summary_df, maps_xy, maps_dxdy, middle_xy, middl
 
 def find_middle_frame(df_frame, width, height):
     df_frame.set_index('index', inplace=True)   # use the index column as the new df_frame index 
-    #determine center dot and FOV outliers
+    # determine center dot and FOV outliers
     median_center_x = np.median(df_frame['center_dot_x'])  # median of center dot locations, use this to determine center dot outlier
     median_center_y = np.median(df_frame['center_dot_y'])
     if (median_center_x > 2/3 * width) or (median_center_x < 1/3 * width) or (median_center_y > 2/3 * height) or (median_center_y < 1/3 * height): 
@@ -600,7 +551,7 @@ def find_middle_frame(df_frame, width, height):
     df_frame['num_slope_outlier'] = num_slope_outliers
     df_frame['num_total_outlier'] = num_outliers + num_fov_outliers + num_slope_outliers
     
-    #find middle frame by min(d_fov_center)
+    # find middle frame by min(d_fov_center)
     df_frame_no_outliers = df_frame[(df_frame['flag_center_dot_outlier'] == 0) & (df_frame['flag_fov_dot_outlier'] == 0) & (df_frame['flag_slope_outlier'] == 0)] # filter out outlier frames
     min_d_fov_center = np.min(df_frame_no_outliers['dist_fov_center'])
     middle_frame_index = df_frame.loc[df_frame['dist_fov_center'] == min_d_fov_center].index[0]
@@ -610,7 +561,7 @@ def find_middle_frame(df_frame, width, height):
 
 def find_outliers(df_frame, width, height):
     df_frame.set_index('index', inplace=True)   # use the index column as the new df_frame index 
-    #determine center dot and FOV outliers
+    # determine center dot and FOV outliers
     median_center_x = np.median(df_frame['center_dot_x'])  # median of center dot locations, use this to determine center dot outlier
     median_center_y = np.median(df_frame['center_dot_y'])
     if (median_center_x > 2/3 * width) or (median_center_x < 1/3 * width) or (median_center_y > 2/3 * height) or (median_center_y < 1/3 * height): 
