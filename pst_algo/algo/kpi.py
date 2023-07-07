@@ -235,26 +235,6 @@ def pp_kernel_map(map_norm, params, map_type=''):
         pp_map = max_map - min_map
         pp[:, :, j] = np.pad(pp_map, pad_width=int(k/2), mode='constant', constant_values=np.nan)
     plot_map_norm(pp, fname_str='Peak-to-Peak '+map_type)
-    
-            # zone_mapp_L = np.where(zone_L, mapp, np.nan)
-            # max_mapp_L = np.max(sliding_window_view(zone_mapp_L, window_shape=(k, k)), axis=(2, 3))
-            # min_mapp_L = np.min(sliding_window_view(zone_mapp_L, window_shape=(k, k)), axis=(2, 3))
-            # pp_mapp_L = max_mapp_L - min_mapp_L
-            # pp_L = np.pad(pp_mapp_L, pad_width=int(k/2), mode='constant', constant_values=np.nan)
-            # #plot_map_norm(pp_L, fname_str='Peak-to-Peak_' + axis[j] + '_map_' + str(radii[i]) + '_degree_zone_L')
-            # summary['kernel_pct99_d' + axis[j] + '_' + str(radii[i]) + '_L'] = (np.nanpercentile(pp_L, 99) - 1) * 100
-            # summary['kernel_pct1_d' + axis[j] + '_' + str(radii[i]) + '_L'] = (np.nanpercentile(pp_L, 1) - 1) * 100
-            # summary['kernel_rms_d' + axis[j] + '_' + str(radii[i]) + '_L'] = (np.nanstd(pp_L)) * 100
-            
-            # zone_mapp_R = np.where(zone_R, mapp, np.nan)
-            # max_mapp_R = np.max(sliding_window_view(zone_mapp_R, window_shape=(k, k)), axis=(2, 3))
-            # min_mapp_R = np.min(sliding_window_view(zone_mapp_R, window_shape=(k, k)), axis=(2, 3))
-            # pp_mapp_R = max_mapp_R - min_mapp_R
-            # pp_R = np.pad(pp_mapp_R, pad_width=int(k/2), mode='constant', constant_values=np.nan)
-            # #plot_map_norm(pp_R, fname_str='Peak-to-Peak_' + axis[j] + '_map_' + str(radii[i]) + '_degree_zone_R')
-            # summary['kernel_pct99_d' + axis[j] + '_' + str(radii[i]) + '_R'] = (np.nanpercentile(pp_R, 99) - 1) * 100
-            # summary['kernel_pct1_d' + axis[j] + '_' + str(radii[i]) + '_R'] = (np.nanpercentile(pp_R, 1) - 1) * 100
-            # summary['kernel_rms_d' + axis[j] + '_' + str(radii[i]) + '_R'] = (np.nanstd(pp_R)) * 100
 
 
 def average_map(maps_dxdy, df_frame, map_dxdy_median, params):
