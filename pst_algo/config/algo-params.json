@@ -1,3 +1,5 @@
 { "min_area" : 30,
 "driver" : "MODEL",
-"binary_threshold" : 150}
+"binary_threshold" : 100,
+"map_y_shift" : 0,
+"num_frames": 16}
