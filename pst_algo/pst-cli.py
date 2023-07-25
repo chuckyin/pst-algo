@@ -49,6 +49,8 @@ from config.logging import setup_logger, logger_process
 
 sys.dont_write_bytecode = True # Disables __pycache__
 
+
+
 def pipeline(queue, df_lst, df_frame_lst, frame_nums, maps_xy, maps_dxdy, output_path, params, image_file):
     #------Logging------
     logger = logging.getLogger(__name__)
@@ -149,111 +151,113 @@ if __name__ == '__main__':
             print ('exe -d <dataset> -p <optional_parameter_file>')
             sys.exit()
         elif opt in ('-d', '--dataset'):
-            dataset_folder = arg
+            dataset_root_folder = arg
         elif opt in ('-p', '--params'):
             params_file = arg
         
-    print ('Dataset: ', os.path.join(current_path, 'data', dataset_folder))
-    print ('Parameters File: ', os.path.join(current_path, 'config', params_file))
+    dataset_folders_path = os.path.join(current_path, 'data', dataset_root_folder)
     
-    params = cf.config(dataset_folder, params_file)
-    
-    log_file = os.path.join(cf.output_path, 'Log_' + time.strftime('%Y%m%d-%H%M%S') + '.log')
-    csv_file = os.path.join(cf.output_path, time.strftime('%Y%m%d-%H%M%S') + '_dots.csv')
-    csv_file_frame = os.path.join(cf.output_path, time.strftime('%Y%m%d-%H%M%S') + '_frames.csv')
-    csv_file_summary = os.path.join(cf.output_path, time.strftime('%Y%m%d-%H%M%S') + '_summary.csv')
-    
-    logger = setup_logger(filename=log_file)
-        
-    image_files_all = glob.glob(cf.input_path + '*.tiff')
-    image_files_all.sort(key=lambda f: int(re.sub('\D', '', f)))
-    
-    if params['num_frames'] == 10:
-        frame_num_list = ['15', '60', '70', '75', '80', '85', '90', '95', '105', '150']
-        image_files = [image_file for image_file in image_files_all 
-                      if ((image_file.split(os.path.sep)[-1].split('_'))[-1].split('.tiff'))[0] in frame_num_list]
-    elif params['num_frames'] == 16:
-        frame_num_list = ['15', '30', '45', '60', '65', '70', '75', '80', '85', '90', '95', '100', '105', '120', '135', '150']
-        image_files = [image_file for image_file in image_files_all 
-                      if ((image_file.split(os.path.sep)[-1].split('_'))[-1].split('.tiff'))[0] in frame_num_list]
-    else:
-        image_files = image_files_all[::int(np.ceil(len(image_files_all) / 10))] # only take 10 images
+    for dataset_folder in os.listdir(dataset_folders_path):
+        if (not dataset_folder.startswith('.')) and ('output' not in dataset_folder):
+            if 'input' not in dataset_folder:
+                dataset_folder_path = os.path.join(dataset_folders_path, dataset_folder)                
+            else:
+                dataset_folder_path = dataset_folders_path
+
+            print ('Dataset: ', dataset_folder_path)
+            print ('Parameters File: ', os.path.join(current_path, 'config', params_file))
+
+            params = cf.config(dataset_folder_path, params_file)
             
-    # Add two reference images
-    overlay_file = os.path.join(cf.input_path, '1000.tiff')
-    no_overlay_file = os.path.join(cf.input_path, '1001.tiff')
-    
-    if os.path.isfile(overlay_file) and os.path.isfile(no_overlay_file):
-        image_files.extend([overlay_file, no_overlay_file])
+            log_file = os.path.join(cf.output_path, 'Log_' + time.strftime('%Y%m%d-%H%M%S') + '.log')
+            csv_file = os.path.join(cf.output_path, time.strftime('%Y%m%d-%H%M%S') + '_dots.csv')
+            csv_file_frame = os.path.join(cf.output_path, time.strftime('%Y%m%d-%H%M%S') + '_frames.csv')
+            csv_file_summary = os.path.join(cf.output_path, time.strftime('%Y%m%d-%H%M%S') + '_summary.csv')
+            
+            logger = setup_logger(filename=log_file)
+                
+            image_files_all = glob.glob(cf.input_path + os.path.sep + '*.tiff')
+            image_files_all.sort(key=lambda f: int(re.sub('\D', '', f)))
+            
+            if params['num_frames'] == 10:
+                frame_num_list = ['15', '60', '70', '75', '80', '85', '90', '95', '105', '150']
+                image_files = [image_file for image_file in image_files_all 
+                            if ((image_file.split(os.path.sep)[-1].split('_'))[-1].split('.tiff'))[0] in frame_num_list]
+            elif params['num_frames'] == 16:
+                frame_num_list = ['15', '30', '45', '60', '65', '70', '75', '80', '85', '90', '95', '100', '105', '120', '135', '150']
+                image_files = [image_file for image_file in image_files_all 
+                            if ((image_file.split(os.path.sep)[-1].split('_'))[-1].split('.tiff'))[0] in frame_num_list]
+            else:
+                image_files = image_files_all[::int(np.ceil(len(image_files_all) / 10))] # only take 10 images
+                    
+            # Add two reference images
+            overlay_file = os.path.join(cf.input_path, '1000.tiff')
+            no_overlay_file = os.path.join(cf.input_path, '1001.tiff')
+            
+            if os.path.isfile(overlay_file) and os.path.isfile(no_overlay_file):
+                image_files.extend([overlay_file, no_overlay_file])
 
-    frame_nums = mp.Manager().list()
-    maps_xy_dct = mp.Manager().dict()
-    maps_dxdy_dct = mp.Manager().dict()
-    df_lst = mp.Manager().list()
-    df_frame_lst = mp.Manager().list()
-    
-    queue = mp.Manager().Queue()
-    listener = mp.Process(target=logger_process, args=(queue, setup_logger, log_file))
-    listener.start()
-    
-    pool = mp.Pool(processes=mp.cpu_count())
+            frame_nums = mp.Manager().list()
+            maps_xy_dct = mp.Manager().dict()
+            maps_dxdy_dct = mp.Manager().dict()
+            df_lst = mp.Manager().list()
+            df_frame_lst = mp.Manager().list()
+            
+            queue = mp.Manager().Queue()
+            listener = mp.Process(target=logger_process, args=(queue, setup_logger, log_file))
+            listener.start()
+            
+            pool = mp.Pool(processes=mp.cpu_count())
 
-    start = time.perf_counter()
-    pipeline_partial = partial(pipeline, queue, df_lst, df_frame_lst, frame_nums, maps_xy_dct, maps_dxdy_dct, cf.output_path, params)
-    pool.map(pipeline_partial, image_files)
-    print(f'Blob Detection time: {round(time.perf_counter() - start, 2)}')
-    df = pd.concat(df_lst, ignore_index=True)
-    df_frame = pd.concat(df_frame_lst, ignore_index=True)
-    print(frame_nums)
-    
-    queue.put(None)   
-    listener.join()
+            start = time.perf_counter()
+            pipeline_partial = partial(pipeline, queue, df_lst, df_frame_lst, frame_nums, maps_xy_dct, maps_dxdy_dct, cf.output_path, params)
+            pool.map(pipeline_partial, image_files)
+            print(f'Blob Detection time: {round(time.perf_counter() - start, 2)}')
+            df = pd.concat(df_lst, ignore_index=True)
+            df_frame = pd.concat(df_frame_lst, ignore_index=True)
+            print(frame_nums)
+            
+            queue.put(None)   
+            listener.join()
 
-    df_frame.sort_values(by='frame_num', key=lambda x: x.astype('int'), inplace=True, ignore_index=True)
-    df_frame['index'] = np.arange(len(df_frame.index))
+            df_frame.sort_values(by='frame_num', key=lambda x: x.astype('int'), inplace=True, ignore_index=True)
+            df_frame['index'] = np.arange(len(df_frame.index))
 
-    df.to_csv(csv_file, index=False)
-    df_frame.to_csv(csv_file_frame, index=False)
-    
-    maps_xy_sorted = sorted(maps_xy_dct.items(), key=lambda x: int(x[0]))
-    maps_xy = [x[1] for x in maps_xy_sorted]
-    maps_dxdy_sorted = sorted(maps_dxdy_dct.items(), key=lambda x: int(x[0]))
-    maps_dxdy = [x[1] for x in maps_dxdy_sorted]
-    
-    kpi.find_outliers(df_frame, width=4024, height=3036)  
-    summary_df = df_frame.loc[(df_frame['frame_num'] == '1000') | (df_frame['frame_num'] == '1001')]
+            df.to_csv(csv_file, index=False)
+            df_frame.to_csv(csv_file_frame, index=False)
+            
+            maps_xy_sorted = sorted(maps_xy_dct.items(), key=lambda x: int(x[0]))
+            maps_xy = [x[1] for x in maps_xy_sorted]
+            maps_dxdy_sorted = sorted(maps_dxdy_dct.items(), key=lambda x: int(x[0]))
+            maps_dxdy = [x[1] for x in maps_dxdy_sorted]
+            
+            kpi.find_outliers(df_frame, width=4024, height=3036)  
+            summary_df = df_frame.loc[(df_frame['frame_num'] == '1000') | (df_frame['frame_num'] == '1001')]
 
-    if summary_df.empty:
-          middle_frame_index = kpi.find_middle_frame(df_frame)
-          summary_df = df_frame.loc[[middle_frame_index]].drop(columns=['dist_center_dot', 'dist_fov_center', 'flag_center_dot_outlier', 'flag_fov_dot_outlier', 'flag_slope_outlier']).reset_index(drop=True)
-    else:
-        df_frame.drop(df_frame.loc[(df_frame['frame_num'] == '1000') | (df_frame['frame_num'] == '1001')].index, inplace=True)
-        middle_frame_index = -1
-        summary_df = summary_df.drop(columns=['frame_num', 'dxdy_spacing', 'map_x_shift', 'map_y_shift', 'num_frames_processed', 'dist_center_dot', 'dist_fov_center', 'flag_center_dot_outlier', 
-                                              'flag_fov_dot_outlier', 'flag_slope_outlier', 'num_center_dot_outlier', 
-                                              'num_fov_dot_outlier', 'num_slope_outlier', 'num_total_outlier']).sum().to_frame().T # Combine both rows into one
-        summary_df['frame_num'] = '1000-1001'
-        summary_df['dxdy_spacing'] = params['dxdy_spacing']
-        summary_df['map_x_shift'] = params['map_x_shift']
-        summary_df['map_y_shift'] = params['map_y_shift']
-        summary_df['num_frames_processed'] = len(df_frame.index)
-        summary_df['num_center_dot_outlier'] = df_frame['num_center_dot_outlier']
-        summary_df['num_fov_dot_outlier'] = df_frame['num_fov_dot_outlier']
-        summary_df['num_slope_outlier'] = df_frame['num_slope_outlier']
-        summary_df['num_total_outlier'] = df_frame['num_total_outlier']
+            if summary_df.empty:
+                middle_frame_index = kpi.find_middle_frame(df_frame)
+                summary_df = df_frame.loc[[middle_frame_index]].drop(columns=['dist_center_dot', 'dist_fov_center', 'flag_center_dot_outlier', 'flag_fov_dot_outlier', 'flag_slope_outlier']).reset_index(drop=True)
+            else:
+                df_frame.drop(df_frame.loc[(df_frame['frame_num'] == '1000') | (df_frame['frame_num'] == '1001')].index, inplace=True)
+                middle_frame_index = -1
+                summary_df = summary_df.drop(columns=['frame_num', 'dxdy_spacing', 'map_x_shift', 'map_y_shift', 'num_frames_processed', 'dist_center_dot', 'dist_fov_center', 'flag_center_dot_outlier', 
+                                                    'flag_fov_dot_outlier', 'flag_slope_outlier', 'num_center_dot_outlier', 
+                                                    'num_fov_dot_outlier', 'num_slope_outlier', 'num_total_outlier']).sum().to_frame().T # Combine both rows into one
+                summary_df['frame_num'] = '1000-1001'
+                summary_df['dxdy_spacing'] = params['dxdy_spacing']
+                summary_df['map_x_shift'] = params['map_x_shift']
+                summary_df['map_y_shift'] = params['map_y_shift']
+                summary_df['num_frames_processed'] = len(df_frame.index)
+                summary_df['num_center_dot_outlier'] = df_frame['num_center_dot_outlier']
+                summary_df['num_fov_dot_outlier'] = df_frame['num_fov_dot_outlier']
+                summary_df['num_slope_outlier'] = df_frame['num_slope_outlier']
+                summary_df['num_total_outlier'] = df_frame['num_total_outlier']
 
-    summary_df = kpi.eval_KPIs(df_frame, params, summary_df, int(middle_frame_index), maps_xy, maps_dxdy)
-    summary_df.to_csv(csv_file_summary, index=False)
-    
-    """ summary_df.to_csv(csv_file_summary, columns=['frame_num', 'total_dots', 'center_dot_x', 'center_dot_y', 'fov_dot_x', 'fov_dot_y', 
-                                                 'median_dot_size', 'median_dot_spacing', 'hor_slope', 'ver_slope', 'dxdy_spacing' ,
-                                                 'map_x_shift', 'map_y_shift', 'num_frames_processed', 'num_center_dot_outlier', 
-                                                 'num_fov_dot_outlier', 'num_slope_outlier', 'num_total_outlier'], index=False) """
-    
-
-    
-end_time = time.monotonic()
-print(timedelta(seconds=end_time - start_time))
+            summary_df = kpi.eval_KPIs(df_frame, params, summary_df, int(middle_frame_index), maps_xy, maps_dxdy)
+            summary_df.to_csv(csv_file_summary, index=False)
+            
+        end_time = time.monotonic()
+        print(timedelta(seconds=end_time - start_time))
 
     
     

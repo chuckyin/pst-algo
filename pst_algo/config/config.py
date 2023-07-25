@@ -17,7 +17,7 @@ current_path = os.getcwd()
 
 
 def get_version():
-    __version__ = '07.03.23'
+    __version__ = '07.25.23'
     
     return __version__      
 
@@ -25,8 +25,8 @@ def get_version():
 def config(dataset_folder, params_file):
     global input_path, output_path
     
-    input_path = os.path.join(current_path, 'data', dataset_folder, 'input/')
-    output_path = os.path.join(current_path, 'data', dataset_folder, 'output/')
+    input_path = os.path.join(current_path, dataset_folder, 'input')
+    output_path = os.path.join(current_path, dataset_folder, 'output')
     
     if not os.path.exists(output_path):
         os.makedirs(output_path)

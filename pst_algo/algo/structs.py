@@ -37,10 +37,8 @@ class Frame:
         self.dotsxy_indexed = {}  # key(x, y) : value(xi, yi)
         self.xi_range = 60
         self.yi_range = 60
-        self.map_xy = np.empty((self.xi_range * 2 + 1, self.yi_range * 2 + 1, 2)) # init map w +/-60 deg
-        self.map_xy[:, :, :] = np.nan
-        self.map_dxdy = np.empty((self.xi_range * 2 + 1, self.yi_range * 2 + 1, 2))
-        self.map_dxdy[:, :, :] = np.nan
+        self.map_xy = np.empty((self.xi_range * 2 + 1, self.yi_range * 2 + 1, 2)) * np.nan # init map w +/-60 deg
+        self.map_dxdy = np.empty((self.xi_range * 2 + 1, self.yi_range * 2 + 1, 2)) * np.nan # init map w +/-60 deg
    
         
     def get_x_y(self, inv=False):

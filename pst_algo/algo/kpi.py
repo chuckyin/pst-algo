@@ -42,7 +42,7 @@ def calc_median_map(maps, min_num=3):
     return output
 
 
-def plot_map_norm(map_norm, levels=None, fname_str=''):
+def plot_map_norm(map_norm, levels=None, cmap='coolwarm', fname_str=''):
     xi_full, yi_full, _ = map_norm.shape
     xi_range = int((xi_full - 1) / 2)
     yi_range = int((yi_full - 1) / 2)
@@ -58,7 +58,7 @@ def plot_map_norm(map_norm, levels=None, fname_str=''):
         plt.title(fname_str + axis)
         plt.xlabel('xi')
         plt.ylabel('yi')
-        plt.contourf(X, Y, map_norm[:, :, i].T, levels=levels, cmap='seismic', extend='both')  #cmap ='coolwarm','bwr'
+        plt.contourf(X, Y, map_norm[:, :, i].T, levels=levels, cmap=cmap, extend='both')  #cmap ='coolwarm','bwr'
         ax.set_aspect('equal')
     
         plt.xlim(-xi_range, xi_range)
@@ -130,6 +130,7 @@ def offset_map_fov (map_input, xi_fov, yi_fov, x_shift=0, y_shift=0):
     #offset map and create FOV map (center of display)
     xi_fov = xi_fov.astype('float')
     yi_fov = yi_fov.astype('float')
+
     map_output = shift_fillnan(map_input, int(np.round(-xi_fov + x_shift)), axis=0) # shift map relative to FOV 
     map_output = shift_fillnan(map_output, int(np.round(-yi_fov + y_shift)), axis=1)
     
@@ -149,10 +150,10 @@ def calc_local_ps_kpi(map_local, map_type=''):
         zone = (map_fov > start_r) * (map_fov <= radii[i])       
         for j in range(len(axis)):            
             mapp = map_local[:, :, j].T
-            
-            summary[map_type + '_rms_d' + axis[j] + '_' + str(radii[i])] = (np.nanstd(mapp[zone])) * 100
-            summary[map_type + '_pct99_d' + axis[j] + '_' + str(radii[i])] = (np.nanpercentile(mapp[zone], 99) - 1) * 100
-            summary[map_type + '_pct1_d' + axis[j] + '_' + str(radii[i])] = (np.nanpercentile(mapp[zone], 1) - 1) * 100
+
+            summary[map_type + '_rms_d' + axis[j] + '_' + str(radii[i])] = np.nanstd(mapp[zone]) * 100
+            summary[map_type + '_pct99_d' + axis[j] + '_' + str(radii[i])] = np.nanpercentile(mapp[zone], 99)
+            summary[map_type + '_pct1_d' + axis[j] + '_' + str(radii[i])] = np.nanpercentile(mapp[zone], 1)
             summary[map_type + '_pp_d' + axis[j] + '_' + str(radii[i])] = summary[map_type + '_pct99_d' + axis[j]
                                         + '_' + str(radii[i])] - summary[map_type + '_pct1_d' + axis[j] + '_' + str(radii[i])]
             if radii[i] in [35, 45]:
@@ -164,15 +165,15 @@ def calc_local_ps_kpi(map_local, map_type=''):
                 zone_L = np.concatenate(((map_fov_L > start_r) * (map_fov_L <= radii[i]), np.zeros((121, 60), dtype=bool)), axis=1)
                 zone_R = np.concatenate((np.zeros((121, 60), dtype=bool), (map_fov_R > start_r) * (map_fov_R <= radii[i])), axis=1)
                 
-                summary[map_type + '_pct99_d' + axis[j] + '_' + str(radii[i]) + '_L'] = (np.nanpercentile(mapp[zone_L], 99) - 1) * 100
-                summary[map_type + '_pct1_d' + axis[j] + '_' + str(radii[i]) + '_L'] = (np.nanpercentile(mapp[zone_L], 1) - 1) * 100
-                summary[map_type + '_rms_d' + axis[j] + '_' + str(radii[i]) + '_L'] = (np.nanstd(mapp[zone_L])) * 100
+                summary[map_type + '_pct99_d' + axis[j] + '_' + str(radii[i]) + '_L'] = np.nanpercentile(mapp[zone_L], 99)
+                summary[map_type + '_pct1_d' + axis[j] + '_' + str(radii[i]) + '_L'] = np.nanpercentile(mapp[zone_L], 1)
+                summary[map_type + '_rms_d' + axis[j] + '_' + str(radii[i]) + '_L'] = np.nanstd(mapp[zone_L]) * 100
                 summary[map_type + '_pp_d' + axis[j] + '_' + str(radii[i]) + '_L'] = summary[map_type + '_pct99_d' + axis[j]
                                             + '_' + str(radii[i]) + '_L'] - summary[map_type + '_pct1_d' + axis[j] + '_' + str(radii[i]) + '_L']
 
-                summary[map_type + '_pct99_d' + axis[j] + '_' + str(radii[i]) + '_R'] = (np.nanpercentile(mapp[zone_R], 99) - 1) * 100
-                summary[map_type + '_pct1_d' + axis[j] + '_' + str(radii[i]) + '_R'] = (np.nanpercentile(mapp[zone_R], 1) - 1) * 100
-                summary[map_type + '_rms_d' + axis[j] + '_' + str(radii[i]) + '_R'] = (np.nanstd(mapp[zone_R])) * 100
+                summary[map_type + '_pct99_d' + axis[j] + '_' + str(radii[i]) + '_R'] = np.nanpercentile(mapp[zone_R], 99)
+                summary[map_type + '_pct1_d' + axis[j] + '_' + str(radii[i]) + '_R'] = np.nanpercentile(mapp[zone_R], 1)
+                summary[map_type + '_rms_d' + axis[j] + '_' + str(radii[i]) + '_R'] = np.nanstd(mapp[zone_R]) * 100
                 
                 summary[map_type + '_pp_d' + axis[j] + '_' + str(radii[i]) + '_R'] = summary[map_type + '_pct99_d' + axis[j]
                                             + '_' + str(radii[i]) + '_R'] - summary[map_type + '_pct1_d' + axis[j] + '_' + str(radii[i]) + '_R']                
@@ -185,7 +186,7 @@ def calc_parametrics_global(map_global, map_fov, label, frame_num):
     #calculate the parametrics based on the map    
     summary = {}
     start_r = -1
-    radii = [25, 35, 45, 60]  #need to start from small to large
+    radii = [25, 35, 45]  #need to start from small to large
     summary['global_' + label + '_frame_num'] = frame_num
     
     #define zones
@@ -200,6 +201,7 @@ def calc_parametrics_global(map_global, map_fov, label, frame_num):
 
 
 def normalized_map(maps_dxdy, middle_frame_index, xi_fov, yi_fov, map_dxdy_median, params):
+    summary = {}
     middle_map_dxdy_norm = maps_dxdy[middle_frame_index] / map_dxdy_median # Normalize map_dxdy
     middle_map_dxdy_norm_fov = offset_map_fov(middle_map_dxdy_norm, xi_fov, yi_fov, params['map_x_shift'], params['map_y_shift'])
     if params['filter_percent'] > 0:
@@ -213,14 +215,16 @@ def normalized_map(maps_dxdy, middle_frame_index, xi_fov, yi_fov, map_dxdy_media
             lower = 1 - (params['filter_percent'] / 100)
             res_mid = np.where(((map_mid > upper) | (map_mid < lower)) & (upper > lower), np.nan, map_mid)
             filtered_middle_map[:, :, j] = res_mid
-        plot_map_norm(filtered_middle_map, levels=np.linspace(0.95, 1.05, 11), fname_str='Filtered_Normalized_Map_d') 
-        summary = calc_local_ps_kpi(filtered_middle_map, map_type='norm_map')
-        pp_kernel_map(filtered_middle_map, params, map_type='Normalized Map')
+        plot_map_norm(filtered_middle_map, levels=np.linspace(0.95, 1.05, 11), cmap='seismic', fname_str='Filtered_Normalized_Map_d') 
+        summary_norm = calc_local_ps_kpi(filtered_middle_map, map_type='norm_map')
+        summary_pp = pp_kernel_map(filtered_middle_map, params, map_type='Normalized Map')
     else:
-        plot_map_norm(middle_map_dxdy_norm_fov, levels=np.linspace(0.95, 1.05, 11), fname_str='Normalized_Map_d')  
-        summary = calc_local_ps_kpi(middle_map_dxdy_norm_fov, map_type='norm_map')
-        pp_kernel_map(middle_map_dxdy_norm_fov, params, map_type='Normalized Map')  
+        plot_map_norm(middle_map_dxdy_norm_fov, levels=np.linspace(0.95, 1.05, 11), cmap='seismic', fname_str='Normalized_Map_d')  
+        summary_norm = calc_local_ps_kpi(middle_map_dxdy_norm_fov, map_type='norm_map')
+        summary_pp = pp_kernel_map(middle_map_dxdy_norm_fov, params, map_type='Normalized Map')
 
+    summary.update(**summary_norm, **summary_pp)
+    
     return summary     
 
 
@@ -230,18 +234,25 @@ def pp_kernel_map(map_norm, params, map_type=''):
     pp = np.empty(np.shape(map_norm))
     pp.fill(np.nan)
     for j in range(len(axis)):
-        min_map = np.min(sliding_window_view(map_norm[:, :, j], window_shape=(k, k)), axis=(2, 3))
-        max_map = np.max(sliding_window_view(map_norm[:, :, j], window_shape=(k, k)), axis=(2, 3))
-        pp_map = max_map - min_map
-        pp[:, :, j] = np.pad(pp_map, pad_width=int(k/2), mode='constant', constant_values=np.nan)
-    plot_map_norm(pp, fname_str='Peak-to-Peak '+map_type)
+        min_map = np.nanmin(sliding_window_view(map_norm[:, :, j], window_shape=(k, k)), axis=(2, 3))
+        max_map = np.nanmax(sliding_window_view(map_norm[:, :, j], window_shape=(k, k)), axis=(2, 3))
+        c_map = sliding_window_view(map_norm[:, :, j], window_shape=(k, k))[:, :, int(k / 2), int(k / 2)]
+
+        pp_map = np.nanmax([max_map-c_map, c_map-min_map], axis=0)
+        pp[:, :, j] = np.pad(pp_map, pad_width=int(k/2), mode='constant', constant_values=np.nan)   
+
+    plot_map_norm(pp, levels=np.linspace(0, 0.1, 11), cmap='coolwarm', fname_str='Peak-to-Peak '+map_type)
+    summary = calc_local_ps_kpi(pp, map_type='kernel_map')
+
+    return summary
 
 
 def average_map(maps_dxdy, df_frame, map_dxdy_median, params):
     maps_dxdy_fov = [offset_map_fov(maps_dxdy[frame_idx], df_frame.loc[frame_idx, 'xi_fov'], df_frame.loc[frame_idx, 'yi_fov'], params['map_x_shift'], params['map_y_shift']) \
                         for frame_idx in range(len(df_frame))]
-    avg_map_dxdy_fov = np.mean(maps_dxdy_fov, axis=0)
-    avg_map_dxdy_fov_norm = avg_map_dxdy_fov / map_dxdy_median # Normalize avg_map_dxdy
+    maps_dxdy_fov_norm = maps_dxdy_fov / map_dxdy_median # Normalize avg_map_dxdy
+    avg_map_dxdy_fov_norm = np.nanmean(maps_dxdy_fov_norm, axis=0)
+   
     if params['filter_percent'] > 0:
         # Filter resultant map by removing filter_percent
         axis = ['X', 'Y']
@@ -253,10 +264,10 @@ def average_map(maps_dxdy, df_frame, map_dxdy_median, params):
             lower = 1 - (params['filter_percent'] / 100)
             res_avg = np.where(((map_avg > upper) | (map_avg < lower)) & (upper > lower), np.nan, map_avg)
             filtered_avg_map[:, :, j] = res_avg
-        plot_map_norm(filtered_avg_map, fname_str='Filtered_Average_Map_d')
+        plot_map_norm(filtered_avg_map, levels=np.linspace(0.985, 1.015, 7), fname_str='Filtered_Average_Map_d')
         summary = calc_local_ps_kpi(filtered_avg_map, map_type='avg_map')
     else:
-        plot_map_norm(avg_map_dxdy_fov_norm, fname_str='Average_Map_d')
+        plot_map_norm(avg_map_dxdy_fov_norm, levels=np.linspace(0.985, 1.015, 7), fname_str='Average_Map_d')
         summary = calc_local_ps_kpi(avg_map_dxdy_fov_norm, map_type='avg_map')      
 
     return summary 
@@ -268,7 +279,7 @@ def eval_KPIs(df_frame, params, summary_old, middle_frame_index, maps_xy, maps_d
         xi_full, yi_full, _ = map_xy.shape
 
         map_distance = np.empty((xi_full, yi_full))
-        map_distance[:,:] = np.nan
+        map_distance[:, :] = np.nan
         
         map_xy_delta = map_xy - ref0
         
@@ -277,14 +288,14 @@ def eval_KPIs(df_frame, params, summary_old, middle_frame_index, maps_xy, maps_d
                 map_distance[i, j] = np.sqrt((map_xy_delta[i, j, 0] ** 2 + map_xy_delta[i, j, 1] ** 2))
         
         return map_distance
-
+    
     map_dxdy_median = calc_median_map(maps_dxdy, min_num=1)
     assert(params['dxdy_spacing'] > 0)
     unitspacing_xy = map_dxdy_median[60, 60] / params['dxdy_spacing']
     
     df_frame['xi_fov'] = (df_frame['fov_dot_x'] - df_frame['center_dot_x']) / unitspacing_xy[0]
     df_frame['yi_fov'] = (df_frame['fov_dot_y'] - df_frame['center_dot_y']) / unitspacing_xy[1]
-    
+
     summary_old['algo_version'] = cf.get_version()
     summary_old['xi_fov'] = (summary_old['fov_dot_x'] - summary_old['center_dot_x']) / unitspacing_xy[0]
     summary_old['yi_fov'] = (summary_old['fov_dot_y'] - summary_old['center_dot_y']) / unitspacing_xy[1]
