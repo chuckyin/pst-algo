@@ -221,37 +221,36 @@ if __name__ == '__main__':
             listener.join()
 
             df_frame.sort_values(by='frame_num', key=lambda x: x.astype('int'), inplace=True, ignore_index=True)
-            df_frame['index'] = np.arange(len(df_frame.index))
 
             df.to_csv(csv_file, index=False)
-            df_frame.to_csv(csv_file_frame, index=False)
             
             maps_xy_sorted = sorted(maps_xy_dct.items(), key=lambda x: int(x[0]))
             maps_xy = [x[1] for x in maps_xy_sorted]
             maps_dxdy_sorted = sorted(maps_dxdy_dct.items(), key=lambda x: int(x[0]))
             maps_dxdy = [x[1] for x in maps_dxdy_sorted]
-            
-            kpi.find_outliers(df_frame, width=4024, height=3036)  
+              
             summary_df = df_frame.loc[(df_frame['frame_num'] == '1000') | (df_frame['frame_num'] == '1001')]
 
             if summary_df.empty:
+                kpi.find_outliers(df_frame, width=4024, height=3036)
                 middle_frame_index = kpi.find_middle_frame(df_frame)
                 summary_df = df_frame.loc[[middle_frame_index]].drop(columns=['dist_center_dot', 'dist_fov_center', 'flag_center_dot_outlier', 'flag_fov_dot_outlier', 'flag_slope_outlier']).reset_index(drop=True)
+                df_frame.to_csv(csv_file_frame, index=False)
             else:
+                two_rows = df_frame.loc[(df_frame['frame_num'] == '1000') | (df_frame['frame_num'] == '1001')].reset_index(drop=True)
+                two_rows = two_rows.drop(columns=['frame_num', 'dxdy_spacing', 'map_x_shift', 'map_y_shift']).sum().to_frame().T # Combine both rows into one
                 df_frame.drop(df_frame.loc[(df_frame['frame_num'] == '1000') | (df_frame['frame_num'] == '1001')].index, inplace=True)
+                two_rows['frame_num'] = '1000-1001'
+                two_rows['dxdy_spacing'] = params['dxdy_spacing']
+                two_rows['map_x_shift'] = params['map_x_shift']
+                two_rows['map_y_shift'] = params['map_y_shift']
+                df_frame = pd.concat([df_frame, two_rows], ignore_index=True)
+
+                kpi.find_outliers(df_frame, width=4024, height=3036)
                 middle_frame_index = -1
-                summary_df = summary_df.drop(columns=['frame_num', 'dxdy_spacing', 'map_x_shift', 'map_y_shift', 'num_frames_processed', 'dist_center_dot', 'dist_fov_center', 'flag_center_dot_outlier', 
-                                                    'flag_fov_dot_outlier', 'flag_slope_outlier', 'num_center_dot_outlier', 
-                                                    'num_fov_dot_outlier', 'num_slope_outlier', 'num_total_outlier']).sum().to_frame().T # Combine both rows into one
-                summary_df['frame_num'] = '1000-1001'
-                summary_df['dxdy_spacing'] = params['dxdy_spacing']
-                summary_df['map_x_shift'] = params['map_x_shift']
-                summary_df['map_y_shift'] = params['map_y_shift']
-                summary_df['num_frames_processed'] = len(df_frame.index)
-                summary_df['num_center_dot_outlier'] = df_frame['num_center_dot_outlier']
-                summary_df['num_fov_dot_outlier'] = df_frame['num_fov_dot_outlier']
-                summary_df['num_slope_outlier'] = df_frame['num_slope_outlier']
-                summary_df['num_total_outlier'] = df_frame['num_total_outlier']
+                summary_df = df_frame.loc[df_frame['frame_num'] == '1000-1001'].reset_index(drop=True)
+                df_frame.to_csv(csv_file_frame, index=False)
+                df_frame.drop(df_frame.loc[df_frame['frame_num'] == '1000-1001'].index, inplace=True)
 
             summary_df = kpi.eval_KPIs(df_frame, params, summary_df, int(middle_frame_index), maps_xy, maps_dxdy)
             summary_df.to_csv(csv_file_summary, index=False)

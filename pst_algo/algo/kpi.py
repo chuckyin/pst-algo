@@ -152,8 +152,8 @@ def calc_local_ps_kpi(map_local, map_type=''):
             mapp = map_local[:, :, j].T
 
             summary[map_type + '_rms_d' + axis[j] + '_' + str(radii[i])] = np.nanstd(mapp[zone]) * 100
-            summary[map_type + '_pct99_d' + axis[j] + '_' + str(radii[i])] = np.nanpercentile(mapp[zone], 99)
-            summary[map_type + '_pct1_d' + axis[j] + '_' + str(radii[i])] = np.nanpercentile(mapp[zone], 1)
+            summary[map_type + '_pct99_d' + axis[j] + '_' + str(radii[i])] = (np.nanpercentile(mapp[zone], 99) - 1) * 100
+            summary[map_type + '_pct1_d' + axis[j] + '_' + str(radii[i])] = (np.nanpercentile(mapp[zone], 1) - 1) * 100
             summary[map_type + '_pp_d' + axis[j] + '_' + str(radii[i])] = summary[map_type + '_pct99_d' + axis[j]
                                         + '_' + str(radii[i])] - summary[map_type + '_pct1_d' + axis[j] + '_' + str(radii[i])]
             if radii[i] in [35, 45]:
@@ -165,16 +165,15 @@ def calc_local_ps_kpi(map_local, map_type=''):
                 zone_L = np.concatenate(((map_fov_L > start_r) * (map_fov_L <= radii[i]), np.zeros((121, 60), dtype=bool)), axis=1)
                 zone_R = np.concatenate((np.zeros((121, 60), dtype=bool), (map_fov_R > start_r) * (map_fov_R <= radii[i])), axis=1)
                 
-                summary[map_type + '_pct99_d' + axis[j] + '_' + str(radii[i]) + '_L'] = np.nanpercentile(mapp[zone_L], 99)
-                summary[map_type + '_pct1_d' + axis[j] + '_' + str(radii[i]) + '_L'] = np.nanpercentile(mapp[zone_L], 1)
+                summary[map_type + '_pct99_d' + axis[j] + '_' + str(radii[i]) + '_L'] = (np.nanpercentile(mapp[zone_L], 99) - 1) * 100
+                summary[map_type + '_pct1_d' + axis[j] + '_' + str(radii[i]) + '_L'] = (np.nanpercentile(mapp[zone_L], 1) - 1) * 100
                 summary[map_type + '_rms_d' + axis[j] + '_' + str(radii[i]) + '_L'] = np.nanstd(mapp[zone_L]) * 100
                 summary[map_type + '_pp_d' + axis[j] + '_' + str(radii[i]) + '_L'] = summary[map_type + '_pct99_d' + axis[j]
                                             + '_' + str(radii[i]) + '_L'] - summary[map_type + '_pct1_d' + axis[j] + '_' + str(radii[i]) + '_L']
 
-                summary[map_type + '_pct99_d' + axis[j] + '_' + str(radii[i]) + '_R'] = np.nanpercentile(mapp[zone_R], 99)
-                summary[map_type + '_pct1_d' + axis[j] + '_' + str(radii[i]) + '_R'] = np.nanpercentile(mapp[zone_R], 1)
+                summary[map_type + '_pct99_d' + axis[j] + '_' + str(radii[i]) + '_R'] = (np.nanpercentile(mapp[zone_R], 99) - 1) * 100
+                summary[map_type + '_pct1_d' + axis[j] + '_' + str(radii[i]) + '_R'] = (np.nanpercentile(mapp[zone_R], 1) - 1) * 100
                 summary[map_type + '_rms_d' + axis[j] + '_' + str(radii[i]) + '_R'] = np.nanstd(mapp[zone_R]) * 100
-                
                 summary[map_type + '_pp_d' + axis[j] + '_' + str(radii[i]) + '_R'] = summary[map_type + '_pct99_d' + axis[j]
                                             + '_' + str(radii[i]) + '_R'] - summary[map_type + '_pct1_d' + axis[j] + '_' + str(radii[i]) + '_R']                
         start_r = radii[i]
@@ -238,8 +237,8 @@ def pp_kernel_map(map_norm, params, map_type=''):
         max_map = np.nanmax(sliding_window_view(map_norm[:, :, j], window_shape=(k, k)), axis=(2, 3))
         c_map = sliding_window_view(map_norm[:, :, j], window_shape=(k, k))[:, :, int(k / 2), int(k / 2)]
 
-        pp_map = np.nanmax([max_map-c_map, c_map-min_map], axis=0)
-        pp[:, :, j] = np.pad(pp_map, pad_width=int(k/2), mode='constant', constant_values=np.nan)   
+        pp_map = np.nanmax([max_map - c_map, c_map - min_map], axis=0)
+        pp[:, :, j] = np.pad(pp_map, pad_width=int(k / 2), mode='constant', constant_values=np.nan)   
 
     plot_map_norm(pp, levels=np.linspace(0, 0.1, 11), cmap='coolwarm', fname_str='Peak-to-Peak '+map_type)
     summary = calc_local_ps_kpi(pp, map_type='kernel_map')
@@ -249,7 +248,8 @@ def pp_kernel_map(map_norm, params, map_type=''):
 
 def average_map(maps_dxdy, df_frame, map_dxdy_median, params):
     maps_dxdy_fov = [offset_map_fov(maps_dxdy[frame_idx], df_frame.loc[frame_idx, 'xi_fov'], df_frame.loc[frame_idx, 'yi_fov'], params['map_x_shift'], params['map_y_shift']) \
-                        for frame_idx in range(len(df_frame))]
+                        for frame_idx in range(len(df_frame)) if (df_frame.loc[frame_idx, 'flag_center_dot_outlier'] == 0) and 
+                        (df_frame.loc[frame_idx, 'flag_fov_dot_outlier'] == 0) and (df_frame.loc[frame_idx, 'flag_slope_outlier'] == 0)]
     maps_dxdy_fov_norm = maps_dxdy_fov / map_dxdy_median # Normalize avg_map_dxdy
     avg_map_dxdy_fov_norm = np.nanmean(maps_dxdy_fov_norm, axis=0)
    
@@ -293,8 +293,8 @@ def eval_KPIs(df_frame, params, summary_old, middle_frame_index, maps_xy, maps_d
     assert(params['dxdy_spacing'] > 0)
     unitspacing_xy = map_dxdy_median[60, 60] / params['dxdy_spacing']
     
-    df_frame['xi_fov'] = (df_frame['fov_dot_x'] - df_frame['center_dot_x']) / unitspacing_xy[0]
-    df_frame['yi_fov'] = (df_frame['fov_dot_y'] - df_frame['center_dot_y']) / unitspacing_xy[1]
+    df_frame['xi_fov'] = ((df_frame['fov_dot_x'] - df_frame['center_dot_x']) / unitspacing_xy[0]).astype('float64')
+    df_frame['yi_fov'] = ((df_frame['fov_dot_y'] - df_frame['center_dot_y']) / unitspacing_xy[1]).astype('float64')
 
     summary_old['algo_version'] = cf.get_version()
     summary_old['xi_fov'] = (summary_old['fov_dot_x'] - summary_old['center_dot_x']) / unitspacing_xy[0]
@@ -351,7 +351,6 @@ def find_middle_frame(df_frame):
     
 
 def find_outliers(df_frame, width, height):
-    df_frame.set_index('index', inplace=True)   # use the index column as the new df_frame index 
     # determine center dot and FOV outliers
     median_center_x = np.median(df_frame['center_dot_x'])  # median of center dot locations, use this to determine center dot outlier
     median_center_y = np.median(df_frame['center_dot_y'])
@@ -367,22 +366,19 @@ def find_outliers(df_frame, width, height):
     num_slope_outliers = 0
     for i in range(len(df_frame.index)):
         # determine if center dot is outlier based on distance to the median location, if > 50px, mark as outlier
-        if (df_frame.loc[i,'center_dot_x'] != 0) and (df_frame.loc[i,'center_dot_y'] != 0):
-            df_frame.loc[i, 'dist_center_dot'] = np.sqrt((df_frame.loc[i,'center_dot_x'] - median_center_x) ** 2 + (df_frame.loc[i,'center_dot_y'] - median_center_y) ** 2)
-            if df_frame.loc[i,'dist_center_dot'] > 50:
-                df_frame.loc[i,'flag_center_dot_outlier']= 1
-                num_outliers += 1
-                logger.warning('Center dot outlier detected on frame #%s', df_frame.loc[i,'frame_num'])
+        df_frame.loc[i, 'dist_center_dot'] = np.sqrt((df_frame.loc[i,'center_dot_x'] - median_center_x) ** 2 + (df_frame.loc[i,'center_dot_y'] - median_center_y) ** 2)
+        if df_frame.loc[i,'dist_center_dot'] > 50:
+            df_frame.loc[i,'flag_center_dot_outlier'] = 1
+            num_outliers += 1
+            logger.warning('Center dot outlier detected on frame #%s', df_frame.loc[i,'frame_num'])
 
-        # determine if FOV dot is outlier, if d < 25px, mark as outlier, if y distance > 200px, outlier 
-        if (df_frame.loc[i,'center_dot_x'] != 0) and (df_frame.loc[i,'center_dot_y'] != 0) and \
-        (df_frame.loc[i,'fov_dot_x'] != 0) and (df_frame.loc[i,'fov_dot_y'] != 0):  
-            df_frame.loc[i, 'dist_fov_center'] = np.sqrt((df_frame.loc[i,'fov_dot_x'] - df_frame.loc[i,'center_dot_x']) ** 2 \
-                                                      + (df_frame.loc[i,'fov_dot_y'] - df_frame.loc[i,'center_dot_y']) ** 2)        
-            if (df_frame.loc[i,'dist_fov_center'] < 25) or (np.abs(df_frame.loc[i,'fov_dot_y'] - df_frame.loc[i,'center_dot_y'])) > 200:
-                df_frame.loc[i, 'flag_fov_dot_outlier'] = 1
-                num_fov_outliers += 1
-                logger.warning('FOV dot outlier detected on frame #%s', df_frame.loc[i,'frame_num'])
+        # determine if FOV dot is outlier, if d < 25px, mark as outlier, if y distance > 200px, outlier   
+        df_frame.loc[i, 'dist_fov_center'] = np.sqrt((df_frame.loc[i,'fov_dot_x'] - df_frame.loc[i,'center_dot_x']) ** 2 \
+                                                    + (df_frame.loc[i,'fov_dot_y'] - df_frame.loc[i,'center_dot_y']) ** 2)        
+        if (df_frame.loc[i,'dist_fov_center'] < 25) or (np.abs(df_frame.loc[i,'fov_dot_y'] - df_frame.loc[i,'center_dot_y'])) > 200:
+            df_frame.loc[i, 'flag_fov_dot_outlier'] = 1
+            num_fov_outliers += 1
+            logger.warning('FOV dot outlier detected on frame #%s', df_frame.loc[i,'frame_num'])
         
         # check slope
         if (df_frame.loc[i,'hor_slope'] != None) and (df_frame.loc[i,'ver_slope'] != None):    
