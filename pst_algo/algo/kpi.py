@@ -8,6 +8,7 @@
 
 import os
 import sys
+import warnings
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -18,6 +19,9 @@ from numpy.lib.stride_tricks import sliding_window_view
 
 
 sys.dont_write_bytecode = True # Disables __pycache__
+warnings.filterwarnings(action='ignore', message='All-NaN slice encountered')
+warnings.filterwarnings(action='ignore', message='All-NaN axis encountered')
+warnings.filterwarnings(action='ignore', message='Mean of empty slice')
 
 
 def calc_median_map(maps, min_num=3):
@@ -247,28 +251,48 @@ def pp_kernel_map(map_norm, params, map_type=''):
 
 
 def average_map(maps_dxdy, df_frame, map_dxdy_median, params):
-    maps_dxdy_fov = [offset_map_fov(maps_dxdy[frame_idx], df_frame.loc[frame_idx, 'xi_fov'], df_frame.loc[frame_idx, 'yi_fov'], params['map_x_shift'], params['map_y_shift']) \
+    maps_dxdy_norm = maps_dxdy / map_dxdy_median # Normalize avg_map_dxdy     
+    maps_dxdy_fov_norm = [offset_map_fov(maps_dxdy_norm[frame_idx], df_frame.loc[frame_idx, 'xi_fov'], df_frame.loc[frame_idx, 'yi_fov'], params['map_x_shift'], params['map_y_shift']) \
                         for frame_idx in range(len(df_frame)) if (df_frame.loc[frame_idx, 'flag_center_dot_outlier'] == 0) and 
                         (df_frame.loc[frame_idx, 'flag_fov_dot_outlier'] == 0) and (df_frame.loc[frame_idx, 'flag_slope_outlier'] == 0)]
-    maps_dxdy_fov_norm = maps_dxdy_fov / map_dxdy_median # Normalize avg_map_dxdy
-    avg_map_dxdy_fov_norm = np.nanmean(maps_dxdy_fov_norm, axis=0)
-   
-    if params['filter_percent'] > 0:
+    
+    print('Number of frames used for averaging:', len(maps_dxdy_fov_norm))
+
+    if params['filter_percent'] > 0 and params['enable_all_saving']:
         # Filter resultant map by removing filter_percent
         axis = ['X', 'Y']
-        filtered_avg_map = np.empty(np.shape(avg_map_dxdy_fov_norm))
-        filtered_avg_map.fill(np.nan)
-        for j in range(len(axis)):
-            map_avg = avg_map_dxdy_fov_norm[:, :, j]
-            upper = 1 + (params['filter_percent'] / 100)
-            lower = 1 - (params['filter_percent'] / 100)
-            res_avg = np.where(((map_avg > upper) | (map_avg < lower)) & (upper > lower), np.nan, map_avg)
-            filtered_avg_map[:, :, j] = res_avg
-        plot_map_norm(filtered_avg_map, levels=np.linspace(0.985, 1.015, 7), fname_str='Filtered_Average_Map_d')
-        summary = calc_local_ps_kpi(filtered_avg_map, map_type='avg_map')
-    else:
-        plot_map_norm(avg_map_dxdy_fov_norm, levels=np.linspace(0.985, 1.015, 7), fname_str='Average_Map_d')
-        summary = calc_local_ps_kpi(avg_map_dxdy_fov_norm, map_type='avg_map')      
+        filtered_maps = np.empty(np.shape(maps_dxdy_fov_norm))
+        filtered_maps.fill(np.nan)
+        for frame in range(len(maps_dxdy_fov_norm)):
+            for j in range(len(axis)):
+                mapp = maps_dxdy_fov_norm[frame][:, :, j]
+                upper = 1 + (params['filter_percent'] / 100)
+                lower = 1 - (params['filter_percent'] / 100)
+                res_map = np.where(((mapp > upper) | (mapp < lower)) & (upper > lower), np.nan, mapp)
+                filtered_maps[frame, :, :, j] = res_map
+            plot_map_norm(filtered_maps[frame], levels=np.linspace(0.985, 1.015, 7), fname_str='Filtered_'+str(frame)+'_Map_d')
+        with warnings.catch_warnings():
+            avg_map_dxdy_fov_norm = np.nanmean(filtered_maps, axis=0)
+    elif params['enable_all_saving']:
+        for frame in range(len(maps_dxdy_fov_norm)): 
+            plot_map_norm(maps_dxdy_fov_norm[frame], levels=np.linspace(0.985, 1.015, 7), fname_str=str(frame)+'_Map_d')
+        avg_map_dxdy_fov_norm = np.nanmean(maps_dxdy_fov_norm, axis=0)
+    elif params['filter_percent'] > 0:
+        # Filter resultant map by removing filter_percent
+        axis = ['X', 'Y']
+        filtered_maps = np.empty(np.shape(maps_dxdy_fov_norm))
+        filtered_maps.fill(np.nan)
+        for frame in range(len(maps_dxdy_fov_norm)):
+            for j in range(len(axis)):
+                mapp = maps_dxdy_fov_norm[frame][:, :, j]
+                upper = 1 + (params['filter_percent'] / 100)
+                lower = 1 - (params['filter_percent'] / 100)
+                res_map = np.where(((mapp > upper) | (mapp < lower)) & (upper > lower), np.nan, mapp)
+                filtered_maps[frame, :, :, j] = res_map
+        avg_map_dxdy_fov_norm = np.nanmean(filtered_maps, axis=0)
+      
+    plot_map_norm(avg_map_dxdy_fov_norm, levels=np.linspace(0.985, 1.015, 7), fname_str='Average_Map_d')
+    summary = calc_local_ps_kpi(avg_map_dxdy_fov_norm, map_type='avg_map')      
 
     return summary 
 
@@ -289,6 +313,7 @@ def eval_KPIs(df_frame, params, summary_old, middle_frame_index, maps_xy, maps_d
         
         return map_distance
     
+    summary_df = pd.DataFrame()
     map_dxdy_median = calc_median_map(maps_dxdy, min_num=1)
     assert(params['dxdy_spacing'] > 0)
     unitspacing_xy = map_dxdy_median[60, 60] / params['dxdy_spacing']
@@ -375,7 +400,8 @@ def find_outliers(df_frame, width, height):
         # determine if FOV dot is outlier, if d < 25px, mark as outlier, if y distance > 200px, outlier   
         df_frame.loc[i, 'dist_fov_center'] = np.sqrt((df_frame.loc[i,'fov_dot_x'] - df_frame.loc[i,'center_dot_x']) ** 2 \
                                                     + (df_frame.loc[i,'fov_dot_y'] - df_frame.loc[i,'center_dot_y']) ** 2)        
-        if (df_frame.loc[i,'dist_fov_center'] < 25) or (np.abs(df_frame.loc[i,'fov_dot_y'] - df_frame.loc[i,'center_dot_y'])) > 200:
+        if (df_frame.loc[i,'dist_fov_center'] < 25) or ((np.abs(df_frame.loc[i,'fov_dot_y'] - df_frame.loc[i,'center_dot_y'])) > 200) or \
+        ((df_frame.loc[i,'fov_dot_x'] == width / 2) and (df_frame.loc[i,'fov_dot_y'] == height / 2)):
             df_frame.loc[i, 'flag_fov_dot_outlier'] = 1
             num_fov_outliers += 1
             logger.warning('FOV dot outlier detected on frame #%s', df_frame.loc[i,'frame_num'])

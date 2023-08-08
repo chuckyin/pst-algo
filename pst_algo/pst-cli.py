@@ -67,12 +67,12 @@ def pipeline(queue, df_lst, df_frame_lst, frame_nums, maps_xy, maps_dxdy, output
     elif params['driver'] == 'FATP': # rotate 180 deg as FATP is mounted upside down
         image = np.rot90(image, 2)  
     
-    logger.info('Frame %s : %s Processing started', frame_num, params['driver'])
+    logger.info('Frame %s: %s Processing started', frame_num, params['driver'])
     height, width, _ = image.shape
     
     if ('1001.tiff' not in image_file) and ('1000.tiff' not in image_file):
         fov_dot = blobs.find_fov(image, params, logger, frame_num, height, width)
-        logger.info('Frame %s : FOV dot was found at %s', frame_num, fov_dot.__str__())
+        logger.info('Frame %s: FOV dot was found at %s', frame_num, fov_dot.__str__())
    
         # Mask the detected FOV dot
         image_gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
@@ -92,7 +92,7 @@ def pipeline(queue, df_lst, df_frame_lst, frame_nums, maps_xy, maps_dxdy, output
 
     elif '1000.tiff' in image_file:
         fov_dot = blobs.find_fov(image, params, logger, frame_num, height, width)
-        logger.info('Frame %s : FOV dot was found at %s', frame_num, fov_dot.__str__())
+        logger.info('Frame %s: FOV dot was found at %s', frame_num, fov_dot.__str__())
         blobs.draw_dots(image, [fov_dot], os.path.join(output_path, frame_num+'_fov_dot.jpeg'), enable=True) # For debugging FOV dot detection
         frame = Frame()
 
@@ -157,14 +157,14 @@ if __name__ == '__main__':
         
     dataset_folders_path = os.path.join(current_path, 'data', dataset_root_folder)
     
-    for dataset_folder in os.listdir(dataset_folders_path):
+    for dix, dataset_folder in enumerate(os.listdir(dataset_folders_path)):
         if (not dataset_folder.startswith('.')) and ('output' not in dataset_folder):
             if 'input' not in dataset_folder:
                 dataset_folder_path = os.path.join(dataset_folders_path, dataset_folder)                
             else:
                 dataset_folder_path = dataset_folders_path
 
-            print ('Dataset: ', dataset_folder_path)
+            print ('Dataset', dix + 1, '/', len(os.listdir(dataset_folders_path)) , ':', dataset_folder_path)
             print ('Parameters File: ', os.path.join(current_path, 'config', params_file))
 
             params = cf.config(dataset_folder_path, params_file)
@@ -223,6 +223,15 @@ if __name__ == '__main__':
             df_frame.sort_values(by='frame_num', key=lambda x: x.astype('int'), inplace=True, ignore_index=True)
 
             df.to_csv(csv_file, index=False)
+
+            if params['enable_all_saving']:
+                for frame_num, frame_data in maps_xy_dct.items(): 
+                    np.savetxt(os.path.join(cf.output_path,str(frame_num) + '_x.csv'), frame_data[:, :, 0].T, delimiter=',')
+                    np.savetxt(os.path.join(cf.output_path,str(frame_num) + '_y.csv'), frame_data[:, :, 1].T, delimiter=',')
+
+                for frame_num, frame_data in maps_dxdy_dct.items(): 
+                    np.savetxt(os.path.join(cf.output_path, str(frame_num) + '_dx.csv'), frame_data[:, :, 0].T, delimiter=',')
+                    np.savetxt(os.path.join(cf.output_path, str(frame_num) + '_dy.csv'), frame_data[:, :, 1].T, delimiter=',')
             
             maps_xy_sorted = sorted(maps_xy_dct.items(), key=lambda x: int(x[0]))
             maps_xy = [x[1] for x in maps_xy_sorted]
@@ -240,7 +249,7 @@ if __name__ == '__main__':
                 two_rows = df_frame.loc[(df_frame['frame_num'] == '1000') | (df_frame['frame_num'] == '1001')].reset_index(drop=True)
                 two_rows = two_rows.drop(columns=['frame_num', 'dxdy_spacing', 'map_x_shift', 'map_y_shift']).sum().to_frame().T # Combine both rows into one
                 df_frame.drop(df_frame.loc[(df_frame['frame_num'] == '1000') | (df_frame['frame_num'] == '1001')].index, inplace=True)
-                two_rows['frame_num'] = '1000-1001'
+                two_rows['frame_num'] = '1001'
                 two_rows['dxdy_spacing'] = params['dxdy_spacing']
                 two_rows['map_x_shift'] = params['map_x_shift']
                 two_rows['map_y_shift'] = params['map_y_shift']
@@ -248,9 +257,9 @@ if __name__ == '__main__':
 
                 kpi.find_outliers(df_frame, width=4024, height=3036)
                 middle_frame_index = -1
-                summary_df = df_frame.loc[df_frame['frame_num'] == '1000-1001'].reset_index(drop=True)
+                summary_df = df_frame.loc[df_frame['frame_num'] == '1001'].reset_index(drop=True)
                 df_frame.to_csv(csv_file_frame, index=False)
-                df_frame.drop(df_frame.loc[df_frame['frame_num'] == '1000-1001'].index, inplace=True)
+                df_frame.drop(df_frame.loc[df_frame['frame_num'] == '1001'].index, inplace=True)
 
             summary_df = kpi.eval_KPIs(df_frame, params, summary_df, int(middle_frame_index), maps_xy, maps_dxdy)
             summary_df.to_csv(csv_file_summary, index=False)

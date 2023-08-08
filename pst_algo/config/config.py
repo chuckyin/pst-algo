@@ -17,7 +17,7 @@ current_path = os.getcwd()
 
 
 def get_version():
-    __version__ = '07.25.23'
+    __version__ = '08.08.23'
     
     return __version__      
 

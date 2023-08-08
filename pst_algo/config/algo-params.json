@@ -1,5 +1,5 @@
-{ "min_area" : 30,
-"driver" : "FATP",
+{"min_area" : 30,
+"driver" : "MODEL",
 "binary_threshold" : 100,
 "map_y_shift" : 0,
 "filter_percent" : 15,
