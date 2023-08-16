@@ -155,7 +155,10 @@ if __name__ == '__main__':
         elif opt in ('-p', '--params'):
             params_file = arg
         
-    dataset_folders_path = os.path.join(current_path, 'data', dataset_root_folder)
+    if os.path.exists(os.path.join(current_path, 'data')):
+        dataset_folders_path = os.path.join(current_path, 'data', dataset_root_folder)
+    else:
+        dataset_folders_path = os.path.join(current_path, dataset_root_folder)
     
     for dix, dataset_folder in enumerate(os.listdir(dataset_folders_path)):
         if (not dataset_folder.startswith('.')) and ('output' not in dataset_folder) and \
