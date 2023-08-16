@@ -27,7 +27,10 @@ def config(dataset_folder, params_file):
     
     input_path = os.path.join(current_path, dataset_folder, 'input')
     output_path = os.path.join(current_path, dataset_folder, 'output')
-    
+
+    if not os.path.exists(input_path):
+        input_path = os.path.join(current_path, dataset_folder)
+
     if not os.path.exists(output_path):
         os.makedirs(output_path)
     

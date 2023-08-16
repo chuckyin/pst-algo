@@ -158,13 +158,14 @@ if __name__ == '__main__':
     dataset_folders_path = os.path.join(current_path, 'data', dataset_root_folder)
     
     for dix, dataset_folder in enumerate(os.listdir(dataset_folders_path)):
-        if (not dataset_folder.startswith('.')) and ('output' not in dataset_folder):
+        if (not dataset_folder.startswith('.')) and ('output' not in dataset_folder) and \
+            (os.path.isdir(os.path.join(dataset_folders_path, dataset_folder))):
             if 'input' not in dataset_folder:
                 dataset_folder_path = os.path.join(dataset_folders_path, dataset_folder)                
             else:
                 dataset_folder_path = dataset_folders_path
 
-            print ('Dataset', dix + 1, '/', len(os.listdir(dataset_folders_path)) , ':', dataset_folder_path)
+            print ('Dataset', dix, '/', len(os.listdir(dataset_folders_path)) - 1 , ':', dataset_folder_path)
             print ('Parameters File: ', os.path.join(current_path, 'config', params_file))
 
             params = cf.config(dataset_folder_path, params_file)
