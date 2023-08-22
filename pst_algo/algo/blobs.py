@@ -121,13 +121,20 @@ def find_fov(image, params, logger, frame_num, height, width):
         for cand in cands:
             M_inner = cv2.moments(contours[cand[1]])
             M_outer = cv2.moments(contours[cand[0]])
-            x = M_inner['m10'] / M_inner['m00']
-            y = M_inner['m01'] / M_inner['m00'] + roi_hei
-            #size = M_outer['m00'] - M_inner['m00']
-            size = M_outer['m00']
-            cand_fov_dots.append(Dot(x, y, size))
-            size_lst.append(size)          
-        fov_dot = [dot for dot in cand_fov_dots if dot.size == np.max(size_lst)][0]
+            try:
+                x = M_inner['m10'] / M_inner['m00']
+                y = M_inner['m01'] / M_inner['m00'] + roi_hei
+                size = M_outer['m00'] #size = M_outer['m00'] - M_inner['m00']
+                cand_fov_dots.append(Dot(x, y, size))
+                size_lst.append(size)
+            except ZeroDivisionError:
+                continue
+        if len(size_lst) > 0:              
+            fov_dot = [dot for dot in cand_fov_dots if dot.size == np.max(size_lst)][0]
+        else:
+            fov_dot = Dot(width / 2, height / 2, 0)
+            # fov_dot = Dot(0, 0, 0)
+            logger.error('Frame %s: Error finding FOV dot', frame_num)
     else:
         fov_dot = Dot(width / 2, height / 2, 0)
         # fov_dot = Dot(0, 0, 0)
