@@ -374,42 +374,41 @@ def eval_KPIs(df_frame, params, summary_old, middle_frame_index, maps_xy, maps_d
     except ValueError:
         logger.error('Error calculating and plotting local PS map')
         
-    # # Global PS
-    # xx, yy = np.meshgrid(np.linspace(-60, 60, 121), np.linspace(-60, 60, 121))
-    # map_fov = np.sqrt(xx ** 2 + yy ** 2) + sys.float_info.epsilon # takes care of divide-by-zero warning
-    # map_distance = calc_distance(maps_xy[middle_frame_index], maps_xy[middle_frame_index][60, 60, :])
-    # map_unit = map_distance / map_fov
-    # df_frame_no_outliers = df_frame[(df_frame['flag_center_dot_outlier'] == 0) & (df_frame['flag_fov_dot_outlier'] == 0) 
-    #                                 & (df_frame['flag_slope_outlier'] == 0)] # filter out outlier frames
+    # Global PS
+    xx, yy = np.meshgrid(np.linspace(-60, 60, 121), np.linspace(-60, 60, 121))
+    map_fov = np.sqrt(xx ** 2 + yy ** 2) + sys.float_info.epsilon # takes care of divide-by-zero warning
+    map_distance = calc_distance(maps_xy[middle_frame_index], maps_xy[middle_frame_index][60, 60, :])
+    map_unit = map_distance / map_fov
+    df_frame_no_outliers = df_frame[(df_frame['flag_center_dot_outlier'] == 0) & (df_frame['flag_fov_dot_outlier'] == 0) 
+                                    & (df_frame['flag_slope_outlier'] == 0)] # filter out outlier frames
     
-    # summary_global = {}
-    # for i in [0, -1]: # first and last frame
-    #     if i == 0:
-    #         label = 'Right Gaze'
-    #     else:
-    #         label = 'Left Gaze'
-    #     try:
-    #         idx = df_frame_no_outliers.index[i]
-    #         map_delta_global = maps_xy[idx] - maps_xy[middle_frame_index]
-    #         map_distance_global = calc_distance(map_delta_global, map_delta_global[60, 60, :])
-    #         map_global = map_distance_global / map_unit + sys.float_info.epsilon # takes care of divide-by-zero warning
-    #         map_global = offset_map_fov(map_global, df_frame_no_outliers.loc[idx, 'xi_fov'], 
-    #                 df_frame_no_outliers.loc[idx, 'yi_fov'], params['map_x_shift'], params['map_y_shift'])
-    #         summary = calc_parametrics_global(map_global, map_fov, label, 
-    #                 df_frame_no_outliers.loc[idx, 'frame_num'])
-    #         summary_global.update(summary)
-    #         plot_map_global(map_global, fname_str=label)
-    #     except ValueError:
-    #         logger.error('Error calculating and plotting global PS map')
+    summary_global = {}
+    for i in [0, -1]: # first and last frame
+        if i == 0:
+            label = 'Right Gaze'
+        else:
+            label = 'Left Gaze'
+        try:
+            idx = df_frame_no_outliers.index[i]
+            map_delta_global = maps_xy[idx] - maps_xy[middle_frame_index]
+            map_distance_global = calc_distance(map_delta_global, map_delta_global[60, 60, :])
+            map_global = map_distance_global / map_unit + sys.float_info.epsilon # takes care of divide-by-zero warning
+            map_global = offset_map_fov(map_global, df_frame_no_outliers.loc[idx, 'xi_fov'], 
+                    df_frame_no_outliers.loc[idx, 'yi_fov'], params['map_x_shift'], params['map_y_shift'])
+            summary = calc_parametrics_global(map_global, map_fov, label, 
+                    df_frame_no_outliers.loc[idx, 'frame_num'])
+            summary_global.update(summary)
+            plot_map_global(map_global, fname_str=label)
+        except ValueError:
+            logger.error('Error calculating and plotting global PS map')
 
-    # cols = [col for col in summary_global.keys()]
-    # summary_global = pd.DataFrame(summary_global.values()).T
-    # summary_global.columns = cols
-    # summary_df = pd.concat([summary_local, summary_global], axis=1, ignore_index=True)
-    # summary_df.columns = summary_local.columns.tolist() + summary_global.columns.tolist()
+    cols = [col for col in summary_global.keys()]
+    summary_global = pd.DataFrame(summary_global.values()).T
+    summary_global.columns = cols
+    summary_df = pd.concat([summary_local, summary_global], axis=1, ignore_index=True)
+    summary_df.columns = summary_local.columns.tolist() + summary_global.columns.tolist()
         
-    # return summary_df
-    return summary_local
+    return summary_df
 
 def find_middle_frame(df_frame):   
     # find middle frame by min(d_fov_center)
