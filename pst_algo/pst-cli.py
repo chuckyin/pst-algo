@@ -33,7 +33,6 @@ import cv2
 import numpy as np
 import pandas as pd
 import logging
-import psutil
 import multiprocessing as mp
 import algo.blobs as blobs
 import algo.kpi as kpi
@@ -85,7 +84,7 @@ def pipeline(queue, df_lst, df_frame_lst, frame_nums, maps_xy, maps_dxdy, output
         frame = blobs.dot_pattern(image_gray, height, width, params, frame_num, logger)
         blobs.draw_dots(image, [fov_dot, frame.center_dot], os.path.join(output_path, frame_num+'_fov_center_dots.jpeg'), enable=True) # For debugging center and FOV dot detection
         blobs.draw_dots(image, frame.dots, os.path.join(output_path, frame_num+'_dots.jpeg'), enable=params['enable_all_saving']) # For debugging blob detection
-        frame.draw_lines_on_image(image, width, height, filepath=os.path.join(output_path, frame_num+'_grouped.jpeg'), enable=params['enable_all_saving'])
+        frame.draw_lines_on_image(image, filepath=os.path.join(output_path, frame_num+'_grouped.jpeg'), enable=params['enable_all_saving'])
 
         maps_xy[frame_num] = frame.map_xy
         maps_dxdy[frame_num] = frame.map_dxdy
@@ -101,7 +100,7 @@ def pipeline(queue, df_lst, df_frame_lst, frame_nums, maps_xy, maps_dxdy, output
         frame = blobs.dot_pattern(image, height, width, params, frame_num, logger)
         blobs.draw_dots(image, [frame.center_dot], os.path.join(output_path, frame_num+'_center_dot.jpeg'), enable=True) # For debugging center dot detection
         blobs.draw_dots(image, frame.dots, os.path.join(output_path, frame_num+'_dots.jpeg'), enable=params['enable_all_saving']) # For debugging blob detection
-        frame.draw_lines_on_image(image, width, height, filepath=os.path.join(output_path, frame_num+'_grouped.jpeg'), enable=params['enable_all_saving'])
+        frame.draw_lines_on_image(image, filepath=os.path.join(output_path, frame_num+'_grouped.jpeg'), enable=params['enable_all_saving'])
 
         maps_xy[frame_num] = frame.map_xy
         maps_dxdy[frame_num] = frame.map_dxdy
@@ -172,6 +171,8 @@ if __name__ == '__main__':
             print ('Parameters File: ', os.path.join(current_path, 'config', params_file))
 
             params = cf.config(dataset_folder_path, params_file)
+            if params is None:
+                continue
             
             log_file = os.path.join(cf.output_path, 'Log_' + time.strftime('%Y%m%d-%H%M%S') + '.log')
             csv_file = os.path.join(cf.output_path, time.strftime('%Y%m%d-%H%M%S') + '_dots.csv')

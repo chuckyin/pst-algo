@@ -22,6 +22,7 @@ sys.dont_write_bytecode = True # Disables __pycache__
 warnings.filterwarnings(action='ignore', message='All-NaN slice encountered')
 warnings.filterwarnings(action='ignore', message='All-NaN axis encountered')
 warnings.filterwarnings(action='ignore', message='Mean of empty slice')
+warnings.filterwarnings(action='ignore', message='invalid value encountered in divide')
 
 
 def calc_median_map(maps, min_num=3):
@@ -245,7 +246,45 @@ def pp_kernel_map(map_norm, params, map_type=''):
         pp[:, :, j] = np.pad(pp_map, pad_width=int(k / 2), mode='constant', constant_values=np.nan)   
 
     plot_map_norm(pp, levels=np.linspace(0, 0.1, 11), cmap='coolwarm', fname_str='Peak-to-Peak '+map_type)
-    summary = calc_local_ps_kpi(pp, map_type='kernel_map')
+
+    # Calculate KPIs
+    xx, yy = np.meshgrid(np.linspace(-60, 60, 121), np.linspace(-60, 60, 121))
+    map_fov = np.sqrt(xx ** 2 + yy ** 2) + sys.float_info.epsilon # takes care of divide-by-zero warning
+    summary = {}
+    start_r = -1
+    radii = [25, 35, 45]  #need to start from small to large
+    axis = ['X', 'Y']
+    for i in range(len(radii)):
+        zone = (map_fov > start_r) * (map_fov <= radii[i])       
+        for j in range(len(axis)):            
+            mapp = pp[:, :, j].T
+
+            summary['kernel_map_rms_d' + axis[j] + '_' + str(radii[i])] = np.nanstd(mapp[zone]) * 100
+            summary['kernel_map_pct99_d' + axis[j] + '_' + str(radii[i])] = np.nanpercentile(mapp[zone], 99) * 100
+            summary['kernel_map_pct1_d' + axis[j] + '_' + str(radii[i])] = np.nanpercentile(mapp[zone], 1) * 100
+            summary['kernel_map_pp_d' + axis[j] + '_' + str(radii[i])] = summary['kernel_map_pct99_d' + axis[j]
+                                        + '_' + str(radii[i])] - summary['kernel_map_pct1_d' + axis[j] + '_' + str(radii[i])]
+            if radii[i] in [35, 45]:
+                # Split map further to compare Nasal and Temporal Zones
+                xx_L, yy_L = np.meshgrid(np.linspace(-60, 0, 61), np.linspace(-60, 60, 121))
+                xx_R, yy_R = np.meshgrid(np.linspace(0, 60, 61), np.linspace(-60, 60, 121))
+                map_fov_L = np.sqrt(xx_L ** 2 + yy_L ** 2) + sys.float_info.epsilon # takes care of divide-by-zero warning
+                map_fov_R = np.sqrt(xx_R ** 2 + yy_R ** 2) + sys.float_info.epsilon # takes care of divide-by-zero warning
+                zone_L = np.concatenate(((map_fov_L > start_r) * (map_fov_L <= radii[i]), np.zeros((121, 60), dtype=bool)), axis=1)
+                zone_R = np.concatenate((np.zeros((121, 60), dtype=bool), (map_fov_R > start_r) * (map_fov_R <= radii[i])), axis=1)
+                
+                summary['kernel_map_pct99_d' + axis[j] + '_' + str(radii[i]) + '_L'] = np.nanpercentile(mapp[zone_L], 99) * 100
+                summary['kernel_map_pct1_d' + axis[j] + '_' + str(radii[i]) + '_L'] = np.nanpercentile(mapp[zone_L], 1) * 100
+                summary['kernel_map_rms_d' + axis[j] + '_' + str(radii[i]) + '_L'] = np.nanstd(mapp[zone_L]) * 100
+                summary['kernel_map_pp_d' + axis[j] + '_' + str(radii[i]) + '_L'] = summary['kernel_map_pct99_d' + axis[j]
+                                            + '_' + str(radii[i]) + '_L'] - summary['kernel_map_pct1_d' + axis[j] + '_' + str(radii[i]) + '_L']
+
+                summary['kernel_map_pct99_d' + axis[j] + '_' + str(radii[i]) + '_R'] = (np.nanpercentile(mapp[zone_R], 99) - 1) * 100
+                summary['kernel_map_pct1_d' + axis[j] + '_' + str(radii[i]) + '_R'] = (np.nanpercentile(mapp[zone_R], 1) - 1) * 100
+                summary['kernel_map_rms_d' + axis[j] + '_' + str(radii[i]) + '_R'] = np.nanstd(mapp[zone_R]) * 100
+                summary['kernel_map_pp_d' + axis[j] + '_' + str(radii[i]) + '_R'] = summary['kernel_map_pct99_d' + axis[j]
+                                            + '_' + str(radii[i]) + '_R'] - summary['kernel_map_pct1_d' + axis[j] + '_' + str(radii[i]) + '_R']                
+        start_r = radii[i]
 
     return summary
 
@@ -313,7 +352,6 @@ def eval_KPIs(df_frame, params, summary_old, middle_frame_index, maps_xy, maps_d
         
         return map_distance
     
-    summary_df = pd.DataFrame()
     map_dxdy_median = calc_median_map(maps_dxdy, min_num=1)
     assert(params['dxdy_spacing'] > 0)
     unitspacing_xy = map_dxdy_median[60, 60] / params['dxdy_spacing']
@@ -331,34 +369,45 @@ def eval_KPIs(df_frame, params, summary_old, middle_frame_index, maps_xy, maps_d
     try:
         summary_norm = normalized_map(maps_dxdy, middle_frame_index, summary_old['xi_fov'], summary_old['yi_fov'], map_dxdy_median, params)
         summary_avg = average_map(maps_dxdy, df_frame, map_dxdy_median, params)
-        summary_df = pd.concat([summary_old, pd.DataFrame(summary_norm.values()).T, pd.DataFrame(summary_avg.values()).T], axis=1, ignore_index=True)
-        summary_df.columns = summary_old.columns.tolist() + [col for col in summary_norm.keys()] + [col for col in summary_avg.keys()]
+        summary_local = pd.concat([summary_old, pd.DataFrame(summary_norm.values()).T, pd.DataFrame(summary_avg.values()).T], axis=1, ignore_index=True)
+        summary_local.columns = summary_old.columns.tolist() + [col for col in summary_norm.keys()] + [col for col in summary_avg.keys()]
     except ValueError:
         logger.error('Error calculating and plotting local PS map')
         
-    # # Global PS
-    # map_distance = calc_distance(middle_xy, middle_xy[60, 60, :])
-    # map_unit = map_distance / map_fov + sys.float_info.epsilon # takes care of divide-by-zero warning
-    # df_frame_no_outliers = df_frame[(df_frame['flag_center_dot_outlier'] == 0) & (df_frame['flag_fov_dot_outlier'] == 0) & (df_frame['flag_slope_outlier'] == 0)] # filter out outlier frames
-      
-    # for i in [0, -1]: #first and last frame
-    #     if i == 0:
-    #         label = 'Right Gaze'
-    #     else:
-    #         label = 'Left Gaze'
-    #     try:
-    #         idx = df_frame_no_outliers.index[i]
-    #         map_delta_global = maps_xy[idx] - middle_xy
-    #         map_distance_global = calc_distance(map_delta_global, map_delta_global[60, 60, :])
-    #         map_global = map_distance_global / map_unit
-    #         map_global = offset_map_fov(map_global, xi_fov, yi_fov, params['map_x_shift'], params['map_y_shift'])
-    #         summary_global = calc_parametrics_global(map_global, map_fov, label, df_frame_no_outliers.loc[idx, 'frame_num'])
-    #         summary.update(summary_global)
-    #         plot_map_global(map_global, fname_str=label)
-    #     except ValueError:
-    #         logger.error('Error calculating and plotting global PS map')
-    #         pass
-            
+    # Global PS
+    xx, yy = np.meshgrid(np.linspace(-60, 60, 121), np.linspace(-60, 60, 121))
+    map_fov = np.sqrt(xx ** 2 + yy ** 2) + sys.float_info.epsilon # takes care of divide-by-zero warning
+    map_distance = calc_distance(maps_xy[middle_frame_index], maps_xy[middle_frame_index][60, 60, :])
+    map_unit = map_distance / map_fov
+    df_frame_no_outliers = df_frame[(df_frame['flag_center_dot_outlier'] == 0) & (df_frame['flag_fov_dot_outlier'] == 0) 
+                                    & (df_frame['flag_slope_outlier'] == 0)] # filter out outlier frames
+    
+    summary_global = {}
+    for i in [0, -1]: # first and last frame
+        if i == 0:
+            label = 'Right Gaze'
+        else:
+            label = 'Left Gaze'
+        try:
+            idx = df_frame_no_outliers.index[i]
+            map_delta_global = maps_xy[idx] - maps_xy[middle_frame_index]
+            map_distance_global = calc_distance(map_delta_global, map_delta_global[60, 60, :])
+            map_global = map_distance_global / map_unit + sys.float_info.epsilon # takes care of divide-by-zero warning
+            map_global = offset_map_fov(map_global, df_frame_no_outliers.loc[idx, 'xi_fov'], 
+                    df_frame_no_outliers.loc[idx, 'yi_fov'], params['map_x_shift'], params['map_y_shift'])
+            summary = calc_parametrics_global(map_global, map_fov, label, 
+                    df_frame_no_outliers.loc[idx, 'frame_num'])
+            summary_global.update(summary)
+            plot_map_global(map_global, fname_str=label)
+        except ValueError:
+            logger.error('Error calculating and plotting global PS map')
+
+    cols = [col for col in summary_global.keys()]
+    summary_global = pd.DataFrame(summary_global.values()).T
+    summary_global.columns = cols
+    summary_df = pd.concat([summary_local, summary_global], axis=1, ignore_index=True)
+    summary_df.columns = summary_local.columns.tolist() + summary_global.columns.tolist()
+        
     return summary_df
            
 
