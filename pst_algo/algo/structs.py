@@ -110,7 +110,7 @@ class Frame:
 
         
     def group_lines(self, ratio=0.2, num_dots_miss=6, accepted_ratio=0.3):
-        def get_lines(x, y, slope, ver=False):
+        def get_lines(x, y, ver=False):
             list_dots_left = np.vstack((y, x)).T
             if ver:
                 list_dots_left = np.fliplr(list_dots_left)
@@ -151,11 +151,11 @@ class Frame:
             return lines_selected
         
         x, y = self.get_x_y()
-        hor_lines = get_lines(x, y, self.hor_slope)
+        hor_lines = get_lines(x, y)
         self.hor_lines = [list(map(tuple, line)) for line in hor_lines]
         
         x, y = self.get_x_y()
-        ver_lines = get_lines(x, y, self.ver_slope, ver=True)
+        ver_lines = get_lines(x, y, ver=True)
         self.ver_lines = [list(map(tuple, line)) for line in ver_lines]
     
     
@@ -226,7 +226,7 @@ class Frame:
         self.map_dxdy[:, :, 1] = mapdy
         
             
-    def draw_lines_on_image(self, image, width, height, filepath, enable=True):
+    def draw_lines_on_image(self, image, filepath, enable=True):
        if enable:
            image_cpy = image.copy()
            for line in self.hor_lines:
