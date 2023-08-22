@@ -30,6 +30,8 @@ def config(dataset_folder, params_file):
 
     if (not os.path.exists(input_path)) and ('dots' in dataset_folder):
         input_path = os.path.join(current_path, dataset_folder)
+    elif os.path.exists(input_path):
+        pass
     else:
         return None
 
