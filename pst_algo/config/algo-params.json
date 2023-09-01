@@ -3,4 +3,5 @@
 "binary_threshold" : 100,
 "map_y_shift" : 0,
 "filter_percent" : 15,
+"enable_all_saving" : "False",
 "num_frames": 16}

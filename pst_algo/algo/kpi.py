@@ -48,39 +48,40 @@ def calc_median_map(maps, min_num=3):
 
 
 def plot_map_norm(map_norm, levels=None, cmap='coolwarm', fname_str=''):
-    xi_full, yi_full, _ = map_norm.shape
-    xi_range = int((xi_full - 1) / 2)
-    yi_range = int((yi_full - 1) / 2)
-    X, Y = np.meshgrid(np.linspace(-xi_range, xi_range, xi_full), np.linspace(-yi_range, yi_range, yi_full))
-    
-    for i in [0, 1]: # x, y
-        if i == 0:
-            axis = 'X'
-        else:
-            axis = 'Y'
-        fig = plt.figure(figsize=(5, 5), dpi=200) 
-        ax = fig.add_subplot(111)
-        plt.title(fname_str + axis)
-        plt.xlabel('xi')
-        plt.ylabel('yi')
-        plt.contourf(X, Y, map_norm[:, :, i].T, levels=levels, cmap=cmap, extend='both')  #cmap ='coolwarm','bwr'
-        ax.set_aspect('equal')
-    
-        plt.xlim(-xi_range, xi_range)
-        plt.ylim(yi_range, -yi_range)
+    if len(map_norm.shape) != 0:
+        xi_full, yi_full, _ = map_norm.shape
+        xi_range = int((xi_full - 1) / 2)
+        yi_range = int((yi_full - 1) / 2)
+        X, Y = np.meshgrid(np.linspace(-xi_range, xi_range, xi_full), np.linspace(-yi_range, yi_range, yi_full))
         
-        radii = [25, 45]
-    
-        for radius in radii:    
-            theta = np.linspace(0, 2 * np.pi, 100)
-            a = radius * np.cos(theta)
-            b = radius * np.sin(theta)
-            plt.plot(a, b, color='green', linestyle=(0, (5, 5)), linewidth=0.4)  #'loosely dotted'
+        for i in [0, 1]: # x, y
+            if i == 0:
+                axis = 'X'
+            else:
+                axis = 'Y'
+            fig = plt.figure(figsize=(5, 5), dpi=200) 
+            ax = fig.add_subplot(111)
+            plt.title(fname_str + axis)
+            plt.xlabel('xi')
+            plt.ylabel('yi')
+            plt.contourf(X, Y, map_norm[:, :, i].T, levels=levels, cmap=cmap, extend='both')  #cmap ='coolwarm','bwr'
+            ax.set_aspect('equal')
+        
+            plt.xlim(-xi_range, xi_range)
+            plt.ylim(yi_range, -yi_range)
             
-        plt.grid(color='grey', linestyle='dashed', linewidth=0.2)
-        plt.rcParams['font.size'] = '5'
-        plt.colorbar()
-        plt.savefig(os.path.join(cf.output_path, fname_str + axis + '.png'))
+            radii = [25, 45]
+        
+            for radius in radii:    
+                theta = np.linspace(0, 2 * np.pi, 100)
+                a = radius * np.cos(theta)
+                b = radius * np.sin(theta)
+                plt.plot(a, b, color='green', linestyle=(0, (5, 5)), linewidth=0.4)  #'loosely dotted'
+                
+            plt.grid(color='grey', linestyle='dashed', linewidth=0.2)
+            plt.rcParams['font.size'] = '5'
+            plt.colorbar()
+            plt.savefig(os.path.join(cf.output_path, fname_str + axis + '.png'))
 
     
 def plot_map_global(map_global, fname_str=''):   
@@ -95,7 +96,7 @@ def plot_map_global(map_global, fname_str=''):
     plt.title('Global PS Map ' + fname_str + ' [degree]')
     plt.xlabel('xi')
     plt.ylabel('yi')
-    levels = np.linspace(0, 1.0, 6)
+    levels = np.linspace(0, 1.0, 11)
     plt.contourf(X, Y, map_global[:, :].T, levels=levels, cmap='coolwarm', extend ='max')  #cmap ='coolwarm','bwr'
     ax.set_aspect('equal')
 
@@ -144,44 +145,45 @@ def offset_map_fov (map_input, xi_fov, yi_fov, x_shift=0, y_shift=0):
     
 def calc_local_ps_kpi(map_local, map_type=''):
     summary = {}
-    #calculate the parametrics based on the map
-    xx, yy = np.meshgrid(np.linspace(-60, 60, 121), np.linspace(-60, 60, 121))
-    map_fov = np.sqrt(xx ** 2 + yy ** 2) + sys.float_info.epsilon # takes care of divide-by-zero warning
+    if len(map_local.shape) != 0:
+        #calculate the parametrics based on the map
+        xx, yy = np.meshgrid(np.linspace(-60, 60, 121), np.linspace(-60, 60, 121))
+        map_fov = np.sqrt(xx ** 2 + yy ** 2) + sys.float_info.epsilon # takes care of divide-by-zero warning
 
-    start_r = -1
-    radii = [25, 35, 45]  #need to start from small to large
-    axis = ['X', 'Y']
-    for i in range(len(radii)):
-        zone = (map_fov > start_r) * (map_fov <= radii[i])       
-        for j in range(len(axis)):            
-            mapp = map_local[:, :, j].T
+        start_r = -1
+        radii = [25, 35, 45, 60]  #need to start from small to large
+        axis = ['X', 'Y']
+        for i in range(len(radii)):
+            zone = (map_fov > start_r) * (map_fov <= radii[i])       
+            for j in range(len(axis)):            
+                mapp = map_local[:, :, j].T
 
-            summary[map_type + '_rms_d' + axis[j] + '_' + str(radii[i])] = np.nanstd(mapp[zone]) * 100
-            summary[map_type + '_pct99_d' + axis[j] + '_' + str(radii[i])] = (np.nanpercentile(mapp[zone], 99) - 1) * 100
-            summary[map_type + '_pct1_d' + axis[j] + '_' + str(radii[i])] = (np.nanpercentile(mapp[zone], 1) - 1) * 100
-            summary[map_type + '_pp_d' + axis[j] + '_' + str(radii[i])] = summary[map_type + '_pct99_d' + axis[j]
-                                        + '_' + str(radii[i])] - summary[map_type + '_pct1_d' + axis[j] + '_' + str(radii[i])]
-            if radii[i] in [35, 45]:
-                # Split map further to compare Nasal and Temporal Zones
-                xx_L, yy_L = np.meshgrid(np.linspace(-60, 0, 61), np.linspace(-60, 60, 121))
-                xx_R, yy_R = np.meshgrid(np.linspace(0, 60, 61), np.linspace(-60, 60, 121))
-                map_fov_L = np.sqrt(xx_L ** 2 + yy_L ** 2) + sys.float_info.epsilon # takes care of divide-by-zero warning
-                map_fov_R = np.sqrt(xx_R ** 2 + yy_R ** 2) + sys.float_info.epsilon # takes care of divide-by-zero warning
-                zone_L = np.concatenate(((map_fov_L > start_r) * (map_fov_L <= radii[i]), np.zeros((121, 60), dtype=bool)), axis=1)
-                zone_R = np.concatenate((np.zeros((121, 60), dtype=bool), (map_fov_R > start_r) * (map_fov_R <= radii[i])), axis=1)
-                
-                summary[map_type + '_pct99_d' + axis[j] + '_' + str(radii[i]) + '_L'] = (np.nanpercentile(mapp[zone_L], 99) - 1) * 100
-                summary[map_type + '_pct1_d' + axis[j] + '_' + str(radii[i]) + '_L'] = (np.nanpercentile(mapp[zone_L], 1) - 1) * 100
-                summary[map_type + '_rms_d' + axis[j] + '_' + str(radii[i]) + '_L'] = np.nanstd(mapp[zone_L]) * 100
-                summary[map_type + '_pp_d' + axis[j] + '_' + str(radii[i]) + '_L'] = summary[map_type + '_pct99_d' + axis[j]
-                                            + '_' + str(radii[i]) + '_L'] - summary[map_type + '_pct1_d' + axis[j] + '_' + str(radii[i]) + '_L']
+                summary[map_type + '_rms_d' + axis[j] + '_' + str(radii[i])] = np.nanstd(mapp[zone]) * 100
+                summary[map_type + '_pct99_d' + axis[j] + '_' + str(radii[i])] = (np.nanpercentile(mapp[zone], 99) - 1) * 100
+                summary[map_type + '_pct1_d' + axis[j] + '_' + str(radii[i])] = (np.nanpercentile(mapp[zone], 1) - 1) * 100
+                summary[map_type + '_pp_d' + axis[j] + '_' + str(radii[i])] = summary[map_type + '_pct99_d' + axis[j]
+                                            + '_' + str(radii[i])] - summary[map_type + '_pct1_d' + axis[j] + '_' + str(radii[i])]
+                if radii[i] in [35, 45]:
+                    # Split map further to compare Nasal and Temporal Zones
+                    xx_L, yy_L = np.meshgrid(np.linspace(-60, 0, 61), np.linspace(-60, 60, 121))
+                    xx_R, yy_R = np.meshgrid(np.linspace(0, 60, 61), np.linspace(-60, 60, 121))
+                    map_fov_L = np.sqrt(xx_L ** 2 + yy_L ** 2) + sys.float_info.epsilon # takes care of divide-by-zero warning
+                    map_fov_R = np.sqrt(xx_R ** 2 + yy_R ** 2) + sys.float_info.epsilon # takes care of divide-by-zero warning
+                    zone_L = np.concatenate(((map_fov_L > start_r) * (map_fov_L <= radii[i]), np.zeros((121, 60), dtype=bool)), axis=1)
+                    zone_R = np.concatenate((np.zeros((121, 60), dtype=bool), (map_fov_R > start_r) * (map_fov_R <= radii[i])), axis=1)
+                    
+                    summary[map_type + '_pct99_d' + axis[j] + '_' + str(radii[i]) + '_L'] = (np.nanpercentile(mapp[zone_L], 99) - 1) * 100
+                    summary[map_type + '_pct1_d' + axis[j] + '_' + str(radii[i]) + '_L'] = (np.nanpercentile(mapp[zone_L], 1) - 1) * 100
+                    summary[map_type + '_rms_d' + axis[j] + '_' + str(radii[i]) + '_L'] = np.nanstd(mapp[zone_L]) * 100
+                    summary[map_type + '_pp_d' + axis[j] + '_' + str(radii[i]) + '_L'] = summary[map_type + '_pct99_d' + axis[j]
+                                                + '_' + str(radii[i]) + '_L'] - summary[map_type + '_pct1_d' + axis[j] + '_' + str(radii[i]) + '_L']
 
-                summary[map_type + '_pct99_d' + axis[j] + '_' + str(radii[i]) + '_R'] = (np.nanpercentile(mapp[zone_R], 99) - 1) * 100
-                summary[map_type + '_pct1_d' + axis[j] + '_' + str(radii[i]) + '_R'] = (np.nanpercentile(mapp[zone_R], 1) - 1) * 100
-                summary[map_type + '_rms_d' + axis[j] + '_' + str(radii[i]) + '_R'] = np.nanstd(mapp[zone_R]) * 100
-                summary[map_type + '_pp_d' + axis[j] + '_' + str(radii[i]) + '_R'] = summary[map_type + '_pct99_d' + axis[j]
-                                            + '_' + str(radii[i]) + '_R'] - summary[map_type + '_pct1_d' + axis[j] + '_' + str(radii[i]) + '_R']                
-        start_r = radii[i]
+                    summary[map_type + '_pct99_d' + axis[j] + '_' + str(radii[i]) + '_R'] = (np.nanpercentile(mapp[zone_R], 99) - 1) * 100
+                    summary[map_type + '_pct1_d' + axis[j] + '_' + str(radii[i]) + '_R'] = (np.nanpercentile(mapp[zone_R], 1) - 1) * 100
+                    summary[map_type + '_rms_d' + axis[j] + '_' + str(radii[i]) + '_R'] = np.nanstd(mapp[zone_R]) * 100
+                    summary[map_type + '_pp_d' + axis[j] + '_' + str(radii[i]) + '_R'] = summary[map_type + '_pct99_d' + axis[j]
+                                                + '_' + str(radii[i]) + '_R'] - summary[map_type + '_pct1_d' + axis[j] + '_' + str(radii[i]) + '_R']                
+            start_r = radii[i]
     
     return summary
 
@@ -190,7 +192,7 @@ def calc_parametrics_global(map_global, map_fov, label, frame_num):
     #calculate the parametrics based on the map    
     summary = {}
     start_r = -1
-    radii = [25, 35, 45]  #need to start from small to large
+    radii = [25, 35, 45, 60]  #need to start from small to large
     summary['global_' + label + '_frame_num'] = frame_num
     
     #define zones
@@ -208,6 +210,7 @@ def normalized_map(maps_dxdy, middle_frame_index, xi_fov, yi_fov, map_dxdy_media
     summary = {}
     middle_map_dxdy_norm = maps_dxdy[middle_frame_index] / map_dxdy_median # Normalize map_dxdy
     middle_map_dxdy_norm_fov = offset_map_fov(middle_map_dxdy_norm, xi_fov, yi_fov, params['map_x_shift'], params['map_y_shift'])
+    plot_map_norm(middle_map_dxdy_norm_fov, fname_str='Normalized_Map_d')
     if params['filter_percent'] > 0:
         # Filter resultant map by removing filter_percent
         axis = ['X', 'Y']
@@ -252,7 +255,7 @@ def pp_kernel_map(map_norm, params, map_type=''):
     map_fov = np.sqrt(xx ** 2 + yy ** 2) + sys.float_info.epsilon # takes care of divide-by-zero warning
     summary = {}
     start_r = -1
-    radii = [25, 35, 45]  #need to start from small to large
+    radii = [25, 35, 45, 60]  #need to start from small to large
     axis = ['X', 'Y']
     for i in range(len(radii)):
         zone = (map_fov > start_r) * (map_fov <= radii[i])       
@@ -279,8 +282,8 @@ def pp_kernel_map(map_norm, params, map_type=''):
                 summary['kernel_map_pp_d' + axis[j] + '_' + str(radii[i]) + '_L'] = summary['kernel_map_pct99_d' + axis[j]
                                             + '_' + str(radii[i]) + '_L'] - summary['kernel_map_pct1_d' + axis[j] + '_' + str(radii[i]) + '_L']
 
-                summary['kernel_map_pct99_d' + axis[j] + '_' + str(radii[i]) + '_R'] = (np.nanpercentile(mapp[zone_R], 99) - 1) * 100
-                summary['kernel_map_pct1_d' + axis[j] + '_' + str(radii[i]) + '_R'] = (np.nanpercentile(mapp[zone_R], 1) - 1) * 100
+                summary['kernel_map_pct99_d' + axis[j] + '_' + str(radii[i]) + '_R'] = np.nanpercentile(mapp[zone_R], 99) * 100
+                summary['kernel_map_pct1_d' + axis[j] + '_' + str(radii[i]) + '_R'] = np.nanpercentile(mapp[zone_R], 1) * 100
                 summary['kernel_map_rms_d' + axis[j] + '_' + str(radii[i]) + '_R'] = np.nanstd(mapp[zone_R]) * 100
                 summary['kernel_map_pp_d' + axis[j] + '_' + str(radii[i]) + '_R'] = summary['kernel_map_pct99_d' + axis[j]
                                             + '_' + str(radii[i]) + '_R'] - summary['kernel_map_pct1_d' + axis[j] + '_' + str(radii[i]) + '_R']                
@@ -295,7 +298,7 @@ def average_map(maps_dxdy, df_frame, map_dxdy_median, params):
                         for frame_idx in range(len(df_frame)) if (df_frame.loc[frame_idx, 'flag_center_dot_outlier'] == 0) and 
                         (df_frame.loc[frame_idx, 'flag_fov_dot_outlier'] == 0) and (df_frame.loc[frame_idx, 'flag_slope_outlier'] == 0)]
     
-    print('Number of frames used for averaging:', len(maps_dxdy_fov_norm))
+    logger.info('Number of frames used for averaging: %s', len(maps_dxdy_fov_norm))
 
     if params['filter_percent'] > 0 and params['enable_all_saving']:
         # Filter resultant map by removing filter_percent
@@ -329,9 +332,9 @@ def average_map(maps_dxdy, df_frame, map_dxdy_median, params):
                 res_map = np.where(((mapp > upper) | (mapp < lower)) & (upper > lower), np.nan, mapp)
                 filtered_maps[frame, :, :, j] = res_map
         avg_map_dxdy_fov_norm = np.nanmean(filtered_maps, axis=0)
-      
+    
     plot_map_norm(avg_map_dxdy_fov_norm, levels=np.linspace(0.985, 1.015, 7), fname_str='Average_Map_d')
-    summary = calc_local_ps_kpi(avg_map_dxdy_fov_norm, map_type='avg_map')      
+    summary = calc_local_ps_kpi(avg_map_dxdy_fov_norm, map_type='avg_map')
 
     return summary 
 
@@ -373,6 +376,7 @@ def eval_KPIs(df_frame, params, summary_old, middle_frame_index, maps_xy, maps_d
         summary_local.columns = summary_old.columns.tolist() + [col for col in summary_norm.keys()] + [col for col in summary_avg.keys()]
     except ValueError:
         logger.error('Error calculating and plotting local PS map')
+
         
     # Global PS
     xx, yy = np.meshgrid(np.linspace(-60, 60, 121), np.linspace(-60, 60, 121))
@@ -399,8 +403,8 @@ def eval_KPIs(df_frame, params, summary_old, middle_frame_index, maps_xy, maps_d
                     df_frame_no_outliers.loc[idx, 'frame_num'])
             summary_global.update(summary)
             plot_map_global(map_global, fname_str=label)
-        except ValueError:
-            logger.error('Error calculating and plotting global PS map')
+        except (ValueError, IndexError):
+            logger.error('Error calculating and plotting global PS map: Too many outliers')
 
     cols = [col for col in summary_global.keys()]
     summary_global = pd.DataFrame(summary_global.values()).T
@@ -409,6 +413,7 @@ def eval_KPIs(df_frame, params, summary_old, middle_frame_index, maps_xy, maps_d
     summary_df.columns = summary_local.columns.tolist() + summary_global.columns.tolist()
         
     return summary_df
+    #return summary_local
 
 def find_middle_frame(df_frame):   
     # find middle frame by min(d_fov_center)
