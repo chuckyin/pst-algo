@@ -1,0 +1,6 @@
+{"min_area" : 30,
+"driver" : "FATP",
+"binary_threshold" : 100,
+"map_y_shift" : 0,
+"filter_percent" : 15,
+"num_frames" : 17}
