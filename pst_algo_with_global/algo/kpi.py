@@ -452,11 +452,17 @@ def eval_KPIs(dots, frames, params, summary_old, middle_frame_index, maps_dxdy):
     xi_fov = frames.loc[frames['frame_num'] == '1001']['xi_fov']
     yi_fov = frames.loc[frames['frame_num'] == '1001']['yi_fov']
 
-    xil = (ref['xi'].astype('Int64').values + 60).tolist()
-    yil = (ref['yi'].astype('Int64').values + 60).tolist()
-    for i, (xi, yi) in enumerate(zip(xil, yil)):
-        if (not pd.isna(xi)) and (not pd.isna(yi)):
-            map_drr[xi, yi] = ref['drr_radial'].iloc[i]
+    #----------REWRITE-------------------------------------#
+    # xil = (ref['xi'].astype('Int64').values + 60).tolist()
+    # yil = (ref['yi'].astype('Int64').values + 60).tolist()
+    # for i, (xi, yi) in enumerate(zip(xil, yil)):
+    #     if (not pd.isna(xi)) and (not pd.isna(yi)):
+    #         map_drr[xi, yi] = ref['drr_radial'].iloc[i]
+    #------------------------------------------------------#
+
+    for i, (xi, yi) in enumerate(zip(ref['xi'].values, ref['yi'].values)):
+        if ~np.isnan(xi) and ~np.isnan(yi) and (xi<=61) and (yi <= 61):
+            map_drr[int(xi) + 60, int(yi) + 60] = ref['drr_radial'].iloc[i]
 
     # Save map values as csv
     np.savetxt(os.path.join(cf.output_path, 'map_drr.csv'), map_drr.T, delimiter=',')
