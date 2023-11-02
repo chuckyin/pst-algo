@@ -342,35 +342,35 @@ def average_map(maps_dxdy, df_frame, map_dxdy_median, params):
 
 def eval_KPIs(dots, frames, params, summary_old, middle_frame_index, maps_dxdy):
     def detect_center_shift(dots, params):
-        try:
-            frame1000 = cv2.imread(os.path.join(cf.input_path, '1000.tiff'))
-        except FileNotFoundError:
+        frame1000 = cv2.imread(os.path.join(cf.input_path, '1000.tiff'))
+        
+        if frame1000 is None:
             logger.error('1000.tiff was not found. Must be using older configuration without frames 1000/1001')
-            return -1
-
-        center1001x = dots.loc[(dots['frame_num'] == '1001') & (dots['xi'] == 0) & (dots['yi'] == 0)]['x'].astype('int')
-        center1001y = dots.loc[(dots['frame_num'] == '1001') & (dots['xi'] == 0) & (dots['yi'] == 0)]['y'].astype('int')
-        center1001r = dots.loc[(dots['frame_num'] == '1001') & (dots['xi'] == 0) & (dots['yi'] == 0)]['size'] / 2
-
-        frame1000_gray = cv2.cvtColor(frame1000, cv2.COLOR_BGR2GRAY)
-        mask = np.ones_like(frame1000_gray)
-        cv2.circle(mask, (int(center1001x), int(center1001y)), int(center1001r), 255, -1)
-        dotmask = cv2.bitwise_or(frame1000_gray, mask)
-
-        reg = dotmask[int(center1001y - 2 * center1001r) : int(center1001y + 2 * center1001r), int(center1001x - 2 * center1001r) : int(center1001x + 2 * center1001r)]
-        _, thresh = cv2.threshold(reg, 100, 255, cv2.THRESH_BINARY)
-        contours, _ = cv2.findContours(thresh, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-        if params['enable_all_saving']:
-            cv2.drawContours(reg, contours, -1, color=(0, 255, 0), thickness=2, lineType=cv2.LINE_AA)
-            cv2.imwrite(os.path.join(cf.output_path, 'overlapped_center_dot.jpeg'), reg)
-
-        if len(contours) > 1:
-            area = max([cv2.contourArea(contour) for contour in contours])
+            return None
         else:
-            area = cv2.contourArea(contours[0])
-        circ = np.pi * float(center1001r * center1001r)
+            center1001x = dots.loc[(dots['frame_num'] == '1001') & (dots['xi'] == 0) & (dots['yi'] == 0)]['x'].astype('int')
+            center1001y = dots.loc[(dots['frame_num'] == '1001') & (dots['xi'] == 0) & (dots['yi'] == 0)]['y'].astype('int')
+            center1001r = dots.loc[(dots['frame_num'] == '1001') & (dots['xi'] == 0) & (dots['yi'] == 0)]['size'] / 2
 
-        return (area / circ)
+            frame1000_gray = cv2.cvtColor(frame1000, cv2.COLOR_BGR2GRAY)
+            mask = np.ones_like(frame1000_gray)
+            cv2.circle(mask, (int(center1001x), int(center1001y)), int(center1001r), 255, -1)
+            dotmask = cv2.bitwise_or(frame1000_gray, mask)
+
+            reg = dotmask[int(center1001y - 2 * center1001r) : int(center1001y + 2 * center1001r), int(center1001x - 2 * center1001r) : int(center1001x + 2 * center1001r)]
+            _, thresh = cv2.threshold(reg, 100, 255, cv2.THRESH_BINARY)
+            contours, _ = cv2.findContours(thresh, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+            if params['enable_all_saving']:
+                cv2.drawContours(reg, contours, -1, color=(0, 255, 0), thickness=2, lineType=cv2.LINE_AA)
+                cv2.imwrite(os.path.join(cf.output_path, 'overlapped_center_dot.jpeg'), reg)
+
+            if len(contours) > 1:
+                area = max([cv2.contourArea(contour) for contour in contours])
+            else:
+                area = cv2.contourArea(contours[0])
+            circ = np.pi * float(center1001r * center1001r)
+
+            return (area / circ)
 
     
     map_dxdy_median = calc_median_map(maps_dxdy, min_num=1)
@@ -389,7 +389,8 @@ def eval_KPIs(dots, frames, params, summary_old, middle_frame_index, maps_dxdy):
     if params['detect_center_shift']:
         # Detect whether there is an unacceptable center dot shift between frames 1000 and 1001
         summary_old['ratio'] = detect_center_shift(dots, params)
-        logger.info('Detected center dot shift confidence was %0.2f', summary_old['ratio'])
+        if ~np.isnan(summary_old['ratio'].astype('float64')[0]):
+            logger.info('Detected center dot shift confidence was %0.2f', summary_old['ratio'])
     
     # Local PS
     try:
@@ -474,10 +475,11 @@ def eval_KPIs(dots, frames, params, summary_old, middle_frame_index, maps_dxdy):
 
     # Generate map
     map_drr = np.empty((60 * 2 + 1, 60 * 2 + 1)) * np.nan
-    ref = merged.loc[merged['frame_num'] == '1001']
-    xi_fov = frames.loc[frames['frame_num'] == '1001']['xi_fov']
-    yi_fov = frames.loc[frames['frame_num'] == '1001']['yi_fov']
 
+    ref = merged.loc[merged['frame_num'] == summary_old.loc[0, 'frame_num']]
+    xi_fov = summary_old['xi_fov']
+    yi_fov = summary_old['yi_fov']
+    
     #----------REWRITE-------------------------------------#
     # xil = (ref['xi'].astype('Int64').values + 60).tolist()
     # yil = (ref['yi'].astype('Int64').values + 60).tolist()

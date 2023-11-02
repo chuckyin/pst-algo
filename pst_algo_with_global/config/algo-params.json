@@ -3,7 +3,7 @@
 "binary_threshold" : 100,
 "map_y_shift" : -6,
 "filter_percent" : 15,
-"num_frames" : 16,
-"median_center_dot_dist" : 150,     
+"num_frames" : 17,
+"median_center_dot_dist" : 50,     
 "delta_dist_fov_center" : 25,     
 "delta_y_fov_center" : 200}
