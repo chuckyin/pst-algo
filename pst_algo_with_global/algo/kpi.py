@@ -404,27 +404,53 @@ def eval_KPIs(dots, frames, params, summary_old, middle_frame_index, maps_dxdy):
     no_center_frame = frames.drop(frames.loc[frames['frame_num'] == '1001'].index)
     no_center_frame.drop(no_center_frame.loc[no_center_frame['num_total_outlier'] > 0].index, inplace=True)
 
-    first_frame_num = no_center_frame.loc[0, 'frame_num']
-    last_frame_num = no_center_frame.loc[no_center_frame.index[-1], 'frame_num']
+    try:
+        first_frame_num = no_center_frame.loc[0, 'frame_num']
+        last_frame_num = no_center_frame.loc[no_center_frame.index[-1], 'frame_num']
 
-    x = no_center_frame['frame_num'].values.astype('int')
-    y = no_center_frame['xi_fov'].values
+        x = no_center_frame['frame_num'].values.astype('int')
+        y = no_center_frame['xi_fov'].values
 
-    coeff = np.polyfit(x, y, 1)
-    logger.info('Linear slope fit: %0.2f, intercept: %0.2f', coeff[0], coeff[1])
-    dots['xi_proj'] = dots['xi'] + (coeff[1] + coeff[0] * dots['frame_num'].astype('int'))
+        coeff = np.polyfit(x, -y, 1)
+        logger.info('Linear slope fit: %0.2f, intercept: %0.2f', coeff[0], coeff[1])
+        dots['xi_proj'] = dots['xi'] + (coeff[1] + coeff[0] * dots['frame_num'].astype('int'))
 
-    # Find the synthetic frame by slicing and stitching frames
-    if not params['right']:
-        dots.loc[(dots['xi_proj'] >= - params['stitch_size']) & (dots['xi_proj'] <= params['stitch_size']) | 
-            ((dots['frame_num'] == last_frame_num) & (dots['xi_proj'] <= params['stitch_size'])) |
-            (dots['xi_proj'] >= - params['stitch_size']) & (dots['frame_num'] == first_frame_num), 'xi_mask'] = 1
-        dots['xi_mask'].fillna(0, inplace=True)
-    else:
-        dots.loc[(dots['xi_proj'] >= - params['stitch_size']) & (dots['xi_proj'] <= params['stitch_size']) | 
-            ((dots['frame_num'] == last_frame_num) & (dots['xi_proj'] >= - params['stitch_size'])) |
-            (dots['xi_proj'] <= params['stitch_size']) & (dots['frame_num'] == first_frame_num), 'xi_mask'] = 1
-        dots['xi_mask'].fillna(0, inplace=True)
+        # Find the synthetic frame by slicing and stitching frames
+        if coeff[0] > 0:
+            # Right to left
+            dots.loc[(dots['xi_proj'] >= - params['stitch_size']) & (dots['xi_proj'] <= params['stitch_size']) | 
+                ((dots['frame_num'] == last_frame_num) & (dots['xi_proj'] <= params['stitch_size'])) |
+                (dots['xi_proj'] >= - params['stitch_size']) & (dots['frame_num'] == first_frame_num), 'xi_mask'] = 1
+            dots['xi_mask'].fillna(0, inplace=True)
+        else:
+            # Left to Right
+            dots.loc[(dots['xi_proj'] >= - params['stitch_size']) & (dots['xi_proj'] <= params['stitch_size']) | 
+                ((dots['frame_num'] == last_frame_num) & (dots['xi_proj'] >= - params['stitch_size'])) |
+                (dots['xi_proj'] <= params['stitch_size']) & (dots['frame_num'] == first_frame_num), 'xi_mask'] = 1
+            dots['xi_mask'].fillna(0, inplace=True)
+
+    except KeyError:   # Use default coefficients 
+        no_outlier_frame = frames.drop(frames.loc[(frames['frame_num'] == '1001') | (frames['flag_slope_outlier'] == 1)
+                     | (frames['flag_fov_dot_outlier'] == 1) | (frames['flag_center_dot_outlier'] == 1)].index)
+        no_outlier_frame.reset_index(inplace=True)
+        first_frame_num = no_outlier_frame.loc[0, 'frame_num']
+        last_frame_num = no_outlier_frame.loc[no_outlier_frame.index[-1], 'frame_num']
+        y_first = no_outlier_frame.loc[0, 'xi_fov']
+        y_last = no_outlier_frame.loc[no_outlier_frame.index[-1], 'xi_fov']
+        if (y_first - y_last) < 0:
+            # Right to Left
+            dots['xi_proj'] = dots['xi'] + (-23.5 + 0.26 * dots['frame_num'].astype('int'))
+            dots.loc[(dots['xi_proj'] >= - params['stitch_size']) & (dots['xi_proj'] <= params['stitch_size']) | 
+                ((dots['frame_num'] == last_frame_num) & (dots['xi_proj'] <= params['stitch_size'])) |
+                (dots['xi_proj'] >= - params['stitch_size']) & (dots['frame_num'] == first_frame_num), 'xi_mask'] = 1
+            dots['xi_mask'].fillna(0, inplace=True)
+        else:
+            # Left to Right
+            dots['xi_proj'] = dots['xi'] + (20.2 - 0.255 * dots['frame_num'].astype('int'))
+            dots.loc[(dots['xi_proj'] >= - params['stitch_size']) & (dots['xi_proj'] <= params['stitch_size']) | 
+                ((dots['frame_num'] == last_frame_num) & (dots['xi_proj'] >= - params['stitch_size'])) |
+                (dots['xi_proj'] <= params['stitch_size']) & (dots['frame_num'] == first_frame_num), 'xi_mask'] = 1
+            dots['xi_mask'].fillna(0, inplace=True)
 
     merged = dots.merge(frames, on=['frame_num'])
 
@@ -493,7 +519,7 @@ def find_middle_frame(df_frame):
     return middle_frame_index
     
 
-def find_outliers(df_frame, width, height):
+def find_outliers(df_frame, params, width, height):
     # determine center dot and FOV outliers
     median_center_x = np.median(df_frame['center_dot_x'])  # median of center dot locations, use this to determine center dot outlier
     median_center_y = np.median(df_frame['center_dot_y'])
@@ -510,7 +536,7 @@ def find_outliers(df_frame, width, height):
     for i in range(len(df_frame.index)):
         # determine if center dot is outlier based on distance to the median location, if > 50px, mark as outlier
         df_frame.loc[i, 'dist_center_dot'] = np.sqrt((df_frame.loc[i, 'center_dot_x'] - median_center_x) ** 2 + (df_frame.loc[i, 'center_dot_y'] - median_center_y) ** 2)
-        if df_frame.loc[i, 'dist_center_dot'] > 50:
+        if df_frame.loc[i, 'dist_center_dot'] > params['median_center_dot_dist']:
             df_frame.loc[i, 'flag_center_dot_outlier'] = 1
             num_outliers += 1
             logger.warning('Center dot outlier detected on frame #%s', df_frame.loc[i, 'frame_num'])
@@ -518,8 +544,9 @@ def find_outliers(df_frame, width, height):
         # determine if FOV dot is outlier, if d < 25px, mark as outlier, if y distance > 200px, outlier   
         df_frame.loc[i, 'dist_fov_center'] = np.sqrt((df_frame.loc[i,'fov_dot_x'] - df_frame.loc[i, 'center_dot_x']) ** 2 \
                                                     + (df_frame.loc[i,'fov_dot_y'] - df_frame.loc[i, 'center_dot_y']) ** 2)        
-        if (df_frame.loc[i, 'dist_fov_center'] < 25) or ((np.abs(df_frame.loc[i, 'fov_dot_y'] - df_frame.loc[i, 'center_dot_y'])) > 200) or \
-        ((df_frame.loc[i, 'fov_dot_x'] == width / 2) and (df_frame.loc[i, 'fov_dot_y'] == height / 2)):
+        if (df_frame.loc[i, 'dist_fov_center'] < params['delta_dist_fov_center']) or \
+                    ((np.abs(df_frame.loc[i, 'fov_dot_y'] - df_frame.loc[i, 'center_dot_y'])) > params['delta_y_fov_center']) or \
+                    ((df_frame.loc[i, 'fov_dot_x'] == width / 2) and (df_frame.loc[i, 'fov_dot_y'] == height / 2)):
             df_frame.loc[i, 'flag_fov_dot_outlier'] = 1
             num_fov_outliers += 1
             logger.warning('FOV dot outlier detected on frame #%s', df_frame.loc[i, 'frame_num'])

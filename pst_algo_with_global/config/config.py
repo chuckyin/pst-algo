@@ -63,8 +63,10 @@ def config(dataset_folder, params_file):
               'map_x_shift' : 0,                 # Horizontal image shift for Stinson
               'enable_all_saving' : False,       # Enable flag to save all intermediate images for debugging
               'detect_center_shift' : True,      # Enable center dot shift detection algo 
-              'stitch_size' : 3,                  # Size of image slice used to create the synthetic stiched frame
-              'right' : False}                   # Toggle direction of motion in test. This shouldn't change in future releases
+              'stitch_size' : 3,                 # Size of image slice used to create the synthetic stiched frame
+              'median_center_dot_dist' : 50,     # Distance between center dot in a frame and the median across all frames. Used for center dot outlier detection.
+              'delta_dist_fov_center' : 25,      # Distance between FOV (red circle) and center dot in a frame. Used for FOV dot outlier detection.
+              'delta_y_fov_center' : 200}        # dY Distance between FOV (red circle) and center dot in a frame. Used for FOV dot outlier detection.
         
     if os.path.isfile(os.path.join(current_path, 'config', params_file)):
         with open(os.path.join(current_path, 'config', params_file)) as pf:

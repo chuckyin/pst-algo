@@ -251,7 +251,7 @@ if __name__ == '__main__':
             summary_df = df_frame.loc[(df_frame['frame_num'] == '1000') | (df_frame['frame_num'] == '1001')]
 
             if summary_df.empty:
-                kpi.find_outliers(df_frame, width=4024, height=3036)
+                kpi.find_outliers(df_frame, params, width=4024, height=3036)
                 middle_frame_index = kpi.find_middle_frame(df_frame)
                 summary_df = df_frame.loc[[middle_frame_index]].drop(columns=['dist_center_dot', 'dist_fov_center', 'flag_center_dot_outlier', 'flag_fov_dot_outlier', 'flag_slope_outlier']).reset_index(drop=True)
                 df_frame.to_csv(csv_file_frame, index=False)
@@ -265,7 +265,7 @@ if __name__ == '__main__':
                 two_rows['map_y_shift'] = params['map_y_shift']
                 df_frame = pd.concat([df_frame, two_rows], ignore_index=True)
 
-                kpi.find_outliers(df_frame, width=4024, height=3036)
+                kpi.find_outliers(df_frame, params, width=4024, height=3036)
                 middle_frame_index = -1
                 summary_df = df_frame.loc[df_frame['frame_num'] == '1001'].reset_index(drop=True)
                 df_frame.to_csv(csv_file_frame, index=False)
