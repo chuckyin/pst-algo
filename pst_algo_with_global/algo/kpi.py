@@ -408,6 +408,7 @@ def eval_KPIs(dots, frames, params, summary_old, middle_frame_index, maps_dxdy):
     try:
         first_frame_num = no_center_frame.loc[0, 'frame_num']
         last_frame_num = no_center_frame.loc[no_center_frame.index[-1], 'frame_num']
+        logger.info('Extreme frames are %s (first) and %s (last)', first_frame_num, last_frame_num)
 
         x = no_center_frame['frame_num'].values.astype('int')
         y = no_center_frame['xi_fov'].values
@@ -423,12 +424,14 @@ def eval_KPIs(dots, frames, params, summary_old, middle_frame_index, maps_dxdy):
                 ((dots['frame_num'] == last_frame_num) & (dots['xi_proj'] <= params['stitch_size'])) |
                 (dots['xi_proj'] >= - params['stitch_size']) & (dots['frame_num'] == first_frame_num), 'xi_mask'] = 1
             dots['xi_mask'].fillna(0, inplace=True)
+            logger.info('Right to Left fit with estimated parameters')
         else:
             # Left to Right
             dots.loc[(dots['xi_proj'] >= - params['stitch_size']) & (dots['xi_proj'] <= params['stitch_size']) | 
                 ((dots['frame_num'] == last_frame_num) & (dots['xi_proj'] >= - params['stitch_size'])) |
                 (dots['xi_proj'] <= params['stitch_size']) & (dots['frame_num'] == first_frame_num), 'xi_mask'] = 1
             dots['xi_mask'].fillna(0, inplace=True)
+            logger.info('Left to Right fit with estimated parameters')
 
     except KeyError:   # Use default coefficients 
         no_outlier_frame = frames.drop(frames.loc[(frames['frame_num'] == '1001') | (frames['flag_slope_outlier'] == 1)
@@ -436,15 +439,17 @@ def eval_KPIs(dots, frames, params, summary_old, middle_frame_index, maps_dxdy):
         no_outlier_frame.reset_index(inplace=True)
         first_frame_num = no_outlier_frame.loc[0, 'frame_num']
         last_frame_num = no_outlier_frame.loc[no_outlier_frame.index[-1], 'frame_num']
+        logger.info('Extreme frames are %s (first) and %s (last)', first_frame_num, last_frame_num)
         y_first = no_outlier_frame.loc[0, 'xi_fov']
         y_last = no_outlier_frame.loc[no_outlier_frame.index[-1], 'xi_fov']
-        if (y_first - y_last) < 0:
+        if (y_first - y_last) > 0:
             # Right to Left
             dots['xi_proj'] = dots['xi'] + (-23.5 + 0.26 * dots['frame_num'].astype('int'))
             dots.loc[(dots['xi_proj'] >= - params['stitch_size']) & (dots['xi_proj'] <= params['stitch_size']) | 
                 ((dots['frame_num'] == last_frame_num) & (dots['xi_proj'] <= params['stitch_size'])) |
                 (dots['xi_proj'] >= - params['stitch_size']) & (dots['frame_num'] == first_frame_num), 'xi_mask'] = 1
             dots['xi_mask'].fillna(0, inplace=True)
+            logger.info('Right to Left fit with default parameters')
         else:
             # Left to Right
             dots['xi_proj'] = dots['xi'] + (20.2 - 0.255 * dots['frame_num'].astype('int'))
@@ -452,6 +457,7 @@ def eval_KPIs(dots, frames, params, summary_old, middle_frame_index, maps_dxdy):
                 ((dots['frame_num'] == last_frame_num) & (dots['xi_proj'] >= - params['stitch_size'])) |
                 (dots['xi_proj'] <= params['stitch_size']) & (dots['frame_num'] == first_frame_num), 'xi_mask'] = 1
             dots['xi_mask'].fillna(0, inplace=True)
+            logger.info('Left to Right fit with default parameters')
 
     merged = dots.merge(frames, on=['frame_num'])
 
@@ -471,7 +477,7 @@ def eval_KPIs(dots, frames, params, summary_old, middle_frame_index, maps_dxdy):
     merged['rr'] = np.sqrt(merged['xx'] ** 2 + merged['yy'] ** 2)
     merged['rr0'] = np.sqrt(merged['xx0'] ** 2 + merged['yy0'] ** 2)
     merged['rr0_unit'] = merged['rr0'] / np.sqrt(merged['xi'] ** 2 + merged['yi'] ** 2)
-    merged['drr_radial'] = (merged['rr0'] - merged['rr']) / merged['rr0_unit']
+    merged['drr_radial'] = (merged['rr'] - merged['rr0']) / merged['rr0_unit']
 
     # Generate map
     map_drr = np.empty((60 * 2 + 1, 60 * 2 + 1)) * np.nan
@@ -542,7 +548,6 @@ def find_outliers(df_frame, params, width, height):
             df_frame.loc[i, 'flag_center_dot_outlier'] = 1
             num_outliers += 1
             logger.warning('Center dot outlier detected on frame #%s', df_frame.loc[i, 'frame_num'])
-
         # determine if FOV dot is outlier, if d < 25px, mark as outlier, if y distance > 200px, outlier   
         df_frame.loc[i, 'dist_fov_center'] = np.sqrt((df_frame.loc[i,'fov_dot_x'] - df_frame.loc[i, 'center_dot_x']) ** 2 \
                                                     + (df_frame.loc[i,'fov_dot_y'] - df_frame.loc[i, 'center_dot_y']) ** 2)        
