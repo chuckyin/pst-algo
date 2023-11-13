@@ -548,12 +548,13 @@ def find_outliers(df_frame, params, width, height):
             df_frame.loc[i, 'flag_center_dot_outlier'] = 1
             num_outliers += 1
             logger.warning('Center dot outlier detected on frame #%s', df_frame.loc[i, 'frame_num'])
+
         # determine if FOV dot is outlier, if d < 25px, mark as outlier, if y distance > 200px, outlier   
         df_frame.loc[i, 'dist_fov_center'] = np.sqrt((df_frame.loc[i,'fov_dot_x'] - df_frame.loc[i, 'center_dot_x']) ** 2 \
                                                     + (df_frame.loc[i,'fov_dot_y'] - df_frame.loc[i, 'center_dot_y']) ** 2)        
         if (df_frame.loc[i, 'dist_fov_center'] < params['delta_dist_fov_center']) or \
-                    ((np.abs(df_frame.loc[i, 'fov_dot_y'] - df_frame.loc[i, 'center_dot_y'])) > params['delta_y_fov_center']) or \
-                    ((df_frame.loc[i, 'fov_dot_x'] == width / 2) and (df_frame.loc[i, 'fov_dot_y'] == height / 2)):
+            ((np.abs(df_frame.loc[i, 'fov_dot_y'] - df_frame.loc[i, 'center_dot_y'])) > params['delta_y_fov_center']) or \
+            ((df_frame.loc[i, 'fov_dot_x'] == width / 2) and (df_frame.loc[i, 'fov_dot_y'] == height / 2)):
             df_frame.loc[i, 'flag_fov_dot_outlier'] = 1
             num_fov_outliers += 1
             logger.warning('FOV dot outlier detected on frame #%s', df_frame.loc[i, 'frame_num'])

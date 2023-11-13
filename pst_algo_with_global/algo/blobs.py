@@ -76,7 +76,7 @@ def detect_blobs(image, params):
     keypoints = detector.detect(image.astype('uint8'))
     x = [kp.pt[0] for kp in keypoints]
     y = [kp.pt[1] for kp in keypoints]
-    size = [kp.size for kp in keypoints]
+    size = [kp.size for kp in keypoints] # Diameter of blob
 
     return x, y, size
 
@@ -85,10 +85,10 @@ def find_center_dot(dots, height, width):
     # Find center dot by size, within the ROI (this is to avoid large blob at other areas)
     max_size = 0
     max_size_index = 0
-    center_roi = 1/6 #find the center spot within the center of the image only
+    center_roi = 1 / 6 # find the center spot within the center of the image only
     for kp in range(len(dots)):
-        if dots[kp].x > (0.5 - 0.5 * center_roi) * width and dots[kp].x < (0.5 + 0.5 * center_roi) * width:  #x filter
-            if dots[kp].y > (0.5 - 0.5 * center_roi) * height and dots[kp].y < (0.5 + 0.5 * center_roi) * height: #y filter
+        if dots[kp].x > (0.5 - 0.5 * center_roi) * width and dots[kp].x < (0.5 + 0.5 * center_roi) * width:  # x filter
+            if dots[kp].y > (0.5 - 0.5 * center_roi) * height and dots[kp].y < (0.5 + 0.5 * center_roi) * height: # y filter
                 if dots[kp].size > max_size:
                     max_size = dots[kp].size
                     max_size_index = kp
@@ -107,6 +107,7 @@ def find_dots(image, params):
   
     
 def find_fov(image, params, logger, frame_num, height, width):
+    max_fov_dot_size = 30
     roi_hei = np.int16(height / 3)
     roi_image = image[roi_hei:height - roi_hei]
     image = prep_image(roi_image, params, normalize_and_filter=True, binarize=True)
@@ -115,22 +116,54 @@ def find_fov(image, params, logger, frame_num, height, width):
     outer_c = np.where((hierarchy[0,:,2] != -1) & (hierarchy[0,:,3] == -1))[0].tolist()
     inner_c = np.where((hierarchy[0,:,2] == -1) & (hierarchy[0,:,3] != -1))[0].tolist()
     cand_fov_dots = []
-    size_lst = []
+
+    #-- Amending this -----------------------------------------
+    # size_lst = []
+    # if len(outer_c) > 0 and len(inner_c) > 0:
+    #     cands = list(zip(outer_c, inner_c))
+    #     for cand in cands:
+    #         M_inner = cv2.moments(contours[cand[1]])
+    #         M_outer = cv2.moments(contours[cand[0]])
+    #         try:
+    #             x = M_inner['m10'] / M_inner['m00']
+    #             y = M_inner['m01'] / M_inner['m00'] + roi_hei
+    #             size = M_outer['m00'] #size = M_outer['m00'] - M_inner['m00']
+    #             cand_fov_dots.append(Dot(x, y, size))
+    #             size_lst.append(size)
+    #         except ZeroDivisionError:
+    #             continue
+    #     if len(size_lst) > 0:              
+    #         fov_dot = [dot for dot in cand_fov_dots if dot.size == np.max(size_lst)][0]
+    #     else:
+    #         fov_dot = Dot(width / 2, height / 2, 0)
+    #         # fov_dot = Dot(0, 0, 0)
+    #         logger.error('Frame %s: Error finding FOV dot', frame_num)
+    # else:
+    #     fov_dot = Dot(width / 2, height / 2, 0)
+    #     # fov_dot = Dot(0, 0, 0)
+    #     logger.error('Frame %s: Error finding FOV dot', frame_num) 
+
+    # --With this--------------------------------------------------------
+
+    # Take a list of outer contours and match them with their inner contours 
+    cands = []
+    for parent in outer_c:
+        if len(np.where(hierarchy[0,:,3] == parent)[0]) == 1:
+            cands.append([parent, np.where(hierarchy[0,:,3] == parent)[0][0]])
+        
     if len(outer_c) > 0 and len(inner_c) > 0:
-        cands = list(zip(outer_c, inner_c))
         for cand in cands:
             M_inner = cv2.moments(contours[cand[1]])
             M_outer = cv2.moments(contours[cand[0]])
             try:
                 x = M_inner['m10'] / M_inner['m00']
                 y = M_inner['m01'] / M_inner['m00'] + roi_hei
-                size = M_outer['m00'] #size = M_outer['m00'] - M_inner['m00']
+                size = np.sqrt(M_outer['m00'] / np.pi) * 2
                 cand_fov_dots.append(Dot(x, y, size))
-                size_lst.append(size)
             except ZeroDivisionError:
                 continue
-        if len(size_lst) > 0:              
-            fov_dot = [dot for dot in cand_fov_dots if dot.size == np.max(size_lst)][0]
+        if len(cand_fov_dots) > 0:
+            fov_dot = cand_fov_dots[np.where(np.array([dot.size for dot in cand_fov_dots]) < max_fov_dot_size)[0][0]]
         else:
             fov_dot = Dot(width / 2, height / 2, 0)
             # fov_dot = Dot(0, 0, 0)
@@ -195,11 +228,11 @@ def draw_dots(image, dots, filepath, enable=True):
             if len(dots) > 2:
                 cv2.circle(image_cpy, (int(dot.x), int(dot.y)), int(dot.size / 2), (0, 255, 0), 3) # Green Dots
             elif len(dots) == 2 and idx == 0:
-                cv2.circle(image_cpy, (int(dot.x), int(dot.y)), int(np.sqrt(dot.size / np.pi)), (0, 0, 255), 3) # Red Circle+ 
+                cv2.circle(image_cpy, (int(dot.x), int(dot.y)), int(dot.size / 2), (0, 0, 255), 3) # Red Circle+ 
             elif len(dots) == 2 and idx == 1:
                 cv2.circle(image_cpy, (int(dot.x), int(dot.y)), int(dot.size / 2), (0, 255, 0), 3) # Center Dot+
             elif (len(dots) == 1) and ('fov' in filepath):
-                cv2.circle(image_cpy, (int(dot.x), int(dot.y)), int(np.sqrt(dot.size / np.pi)), (0, 0, 255), 3) # Just Red Circle
+                cv2.circle(image_cpy, (int(dot.x), int(dot.y)), int(dot.size / 2), (0, 0, 255), 3) # Just Red Circle
             elif (len(dots) == 1) and ('center' in filepath):
                 cv2.circle(image_cpy, (int(dot.x), int(dot.y)), int(dot.size / 2), (0, 255, 0), 3) # Just Center Dot
         cv2.imwrite(filepath, image_cpy, [cv2.IMWRITE_JPEG_QUALITY, 40])

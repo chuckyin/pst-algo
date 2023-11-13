@@ -76,7 +76,7 @@ def pipeline(queue, df_lst, df_frame_lst, frame_nums, maps_xy, maps_dxdy, output
         # Mask the detected FOV dot
         image_gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
         mask = np.zeros_like(image_gray)
-        cv2.circle(mask, (int(fov_dot.x), int(fov_dot.y)), int(np.sqrt(fov_dot.size / np.pi) + 7), 255, -1)
+        cv2.circle(mask, (int(fov_dot.x), int(fov_dot.y)), int((fov_dot.size / 2) + 7), 255, -1)
         image_gray = cv2.bitwise_and(image_gray, cv2.bitwise_not(mask))
         if params['enable_all_saving']:
             cv2.imwrite(os.path.join(output_path, frame_num+'_no_fov.jpeg'), image_gray, [cv2.IMWRITE_JPEG_QUALITY, 40]) 
