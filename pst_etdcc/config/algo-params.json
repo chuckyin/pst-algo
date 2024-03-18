@@ -1,0 +1,13 @@
+{"min_area" : 30,
+"driver" : "MODEL",
+"binary_threshold" : 100,
+"filter_percent" : 15,
+"num_frames" : 17,
+"detect_center_shift" : false,
+"enable_all_saving" : true,
+"median_center_dot_dist" : 50,     
+"delta_dist_fov_center" : 25,     
+"delta_y_fov_center" : 200,
+"no_red_circle": true,
+"x_target" : 1119,
+"y_target" : 1113}
